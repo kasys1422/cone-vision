@@ -1,0 +1,28 @@
+name: TraCon training tools
+on:
+  push:
+    branches: [experiment/tracon-v9-20261105]
+    paths: [.github/workflows/tracon-training-tools.yml]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fetch official pretrained model and binary Python packages
+        run: |
+          mkdir tools
+          curl --fail --location --retry 2 'https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.pth' -o tools/yolox_nano_coco.pth
+          python -m pip download --only-binary=:all: --dest tools onnx==1.19.1 onnxruntime==1.23.2
+          sha256sum tools/* > tools/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tracon-training-tools
+          path: tools/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
