@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+.env.*
+
+# Node
+node_modules/
+.npm/
+dist/
+coverage/
+
+# Data and temporary training outputs
+datasets/
+checkpoints/
+runs/
+wandb/
+*.pth
+*.ckpt
+*_optimizer_last.pt
+*_last.pt
+outputs/
+temp/
+tmp/
+
+# Keep deployable ONNX files in models/ tracked.
+# Carefully review checkpoint / source licenses before committing weights.
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
