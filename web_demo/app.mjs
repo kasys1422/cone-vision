@@ -1,3 +1,4 @@
+import {loadPackedScriptURL} from './packed_loader.mjs';
 import {ConeVision} from './inference.mjs';
 import {loadOpenCV, scaleGeometry} from './pnp.mjs';
 
@@ -128,7 +129,9 @@ async function loadModels() {
       els.baseWidthInput.value = state.geometry.base_width_m.toFixed(3);
     }
     if (!state.cv) {
-      ({cv: state.cv} = await loadOpenCV('./vendor/opencv.js'));
+      const opencvURL = await loadPackedScriptURL('../.payload/opencv', 5);
+      try { ({cv: state.cv} = await loadOpenCV(opencvURL)); }
+      finally { URL.revokeObjectURL(opencvURL); }
     }
     if (state.vision) {
       await Promise.allSettled([state.vision.detector.release(), state.vision.keypoints.release()]);

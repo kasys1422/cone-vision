@@ -1,3 +1,4 @@
+import {loadPackedBinary} from './packed_loader.mjs';
 /** GPL-3.0-only. Two independent ONNX sessions; no server inference.
  * Geometry/PnP reference implementation lives in ../geometry/pnp.py.
  * All output pixels refer to the original uploaded image, with no EXIF ambiguity
@@ -256,10 +257,12 @@ export class ConeVision {
       } catch { /* Explicit defaults keep the standalone interface usable. */ }
     }
     let lastError;
+    const detectorSource = detectorProfile === 'retrain_v7'
+      ? await loadPackedBinary('../.payload/detector', 5) : detectorURL;
     for (const provider of choices) {
       let detector;
       try {
-        detector = await ort.InferenceSession.create(detectorURL, {executionProviders: [provider]});
+        detector = await ort.InferenceSession.create(detectorSource, {executionProviders: [provider]});
         const keypoints = await ort.InferenceSession.create(keypointsURL, {executionProviders: [provider]});
         return new ConeVision(ort, detector, keypoints, provider, spec);
       } catch (err) {
