@@ -1,9 +1,10 @@
-const CACHE = 'cone-vision-v1';
+const CACHE = 'cone-vision-v2-exif';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.mjs',
+  './exif_fov.mjs',
   './inference.mjs',
   './pnp.mjs',
   './manifest.webmanifest',
