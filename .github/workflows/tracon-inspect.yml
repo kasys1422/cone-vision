@@ -1,0 +1,39 @@
+name: TraCon annotation inspection
+on:
+  push:
+    branches: [experiment/tracon-v9]
+    paths: [.github/workflows/tracon-inspect.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch fixed upstream data for requested annotation review
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p inspection
+          curl --fail --location --retry 2 --max-time 180 \
+            https://codeload.github.com/ikatsamenis/Cone-Detection/zip/7ac4af371e826b5124a9b4defaa3327bc817817e \
+            -o inspection/upstream.zip
+          sha256sum inspection/upstream.zip > inspection/SHA256SUMS.txt
+          python - <<'PY'
+          import json, pathlib, zipfile
+          p=pathlib.Path('inspection/upstream.zip')
+          with zipfile.ZipFile(p) as z:
+              items=[{'path':x.filename,'bytes':x.file_size} for x in z.infolist() if not x.is_dir()]
+          report={'upstream':'ikatsamenis/Cone-Detection','commit':'7ac4af371e826b5124a9b4defaa3327bc817817e','purpose':'User-requested annotation inspection; no training or deployment in this job','license_status':'Not established; do not redistribute source images or claim GPL coverage','files':items}
+          pathlib.Path('inspection/inventory.json').write_text(json.dumps(report,indent=2))
+          print('files:',len(items),'uncompressed bytes:',sum(x['bytes'] for x in items))
+          PY
+      - name: Temporary inspection artifact (not a Pages asset)
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracon-inspection
+          path: inspection/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
