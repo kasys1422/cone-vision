@@ -1,4 +1,5 @@
 import {loadPackedScriptURL} from './packed_loader.mjs';
+import {readExifFov} from './exif_fov.mjs';
 import {ConeVision} from './inference.mjs';
 import {loadOpenCV, scaleGeometry} from './pnp.mjs';
 
@@ -31,7 +32,10 @@ const state = {
   installPrompt: null,
   cameraCalibration: null,
   modelLoading: false,
-  scanning: false
+  scanning: false,
+  imageSequence: 0,
+  exifFov: null,
+  fovSource: 'manual'
 };
 
 const els = {
@@ -52,6 +56,10 @@ const els = {
   coneHeightInput: $('#coneHeightInput'),
   baseWidthInput: $('#baseWidthInput'),
   fovInput: $('#fovInput'),
+  fovStatus: $('#fovStatus'),
+  reviewFovStatus: $('#reviewFovStatus'),
+  reviewFovInput: $('#reviewFovInput'),
+  useExifFovButton: $('#useExifFovButton'),
   cameraJsonInput: $('#cameraJsonInput'),
   loadingOverlay: $('#loadingOverlay'),
   coneList: $('#coneList'),
@@ -113,9 +121,54 @@ function activeGeometry() {
 }
 
 function activeCameraModel(width, height) {
-  if (state.cameraCalibration?.K) return {K: state.cameraCalibration.K, distortion: state.cameraCalibration.distortion ?? [], mode: '校正済み'};
-  const hfov = Number(els.fovInput.value || 60);
-  return {K: createApproxK(width, height, hfov), distortion: [], mode: '概算'};
+  if (state.cameraCalibration?.K) {
+    const c = state.cameraCalibration;
+    const expectedWidth = c.image_width ?? c.image_size?.[0];
+    const expectedHeight = c.image_height ?? c.image_size?.[1];
+    if ((expectedWidth && expectedWidth !== width) || (expectedHeight && expectedHeight !== height)) {
+      throw new Error('校正JSONの画像サイズが読み込み画像と一致しません');
+    }
+    return {K: c.K, distortion: c.distortion ?? [], mode: '校正済み'};
+  }
+  const hfov = Number(els.fovInput.value);
+  if (!(hfov > 4 && hfov < 175)) throw new Error('水平画角を4°～175°の範囲で指定してください');
+  const isExif = state.fovSource === 'exif' && state.exifFov?.status === 'ok';
+  // Calculated from oriented, decoded pixels; no EXIF GPS or private fields are retained.
+  return {K: createApproxK(width, height, hfov), distortion: [], mode: isExif ? 'EXIF概算' : '手動概算'};
+}
+
+function setFovStatus(message, status) {
+  els.fovStatus.textContent = message;
+  els.fovStatus.dataset.status = status;
+  els.reviewFovStatus.textContent = message;
+  els.reviewFovStatus.dataset.status = status;
+}
+
+function applyExifFov(result) {
+  const wasExif = state.fovSource === 'exif';
+  state.exifFov = result;
+  if (result?.status === 'ok') {
+    state.fovSource = 'exif';
+    els.fovInput.value = result.fovDeg.toFixed(2);
+    els.reviewFovInput.value = els.fovInput.value;
+    setFovStatus(`EXIF自動：${result.message}。レンズ補正等による誤差に注意。`, 'ok');
+    els.useExifFovButton.classList.add('hidden');
+  } else {
+    state.fovSource = 'manual';
+    // Never silently reuse the previous photo's EXIF focal length for a different image.
+    if (wasExif) els.fovInput.value = '60';
+    els.reviewFovInput.value = els.fovInput.value;
+    setFovStatus(result?.message ?? 'カメラ撮影には元ファイルのEXIFがありません。画角を手動設定してください。', 'warning');
+    els.useExifFovButton.classList.add('hidden');
+  }
+}
+
+function markManualFov(fromReview = false) {
+  if (fromReview) els.fovInput.value = els.reviewFovInput.value;
+  else els.reviewFovInput.value = els.fovInput.value;
+  state.fovSource = 'manual';
+  setFovStatus('手動設定の画角を使用します。EXIF値がある場合は設定から戻せます。', 'manual');
+  els.useExifFovButton.classList.toggle('hidden', state.exifFov?.status !== 'ok');
 }
 
 async function loadModels() {
@@ -213,7 +266,7 @@ function selectCone(index) {
   els.confidenceValue.textContent = confidenceLabel(obj.confidence);
   els.modeValue.textContent = state.lastResult?.pose_mode ?? '—';
   const notes = [];
-  if (state.lastResult?.pose_mode === '概算') notes.push('未校正の概算距離です。');
+  if (state.lastResult?.pose_mode !== '校正済み') notes.push('未校正の概算距離です。EXIFまたは手動画角ではレンズ歪みを補正できません。');
   if (pose && !pose.accepted) notes.push('PnPの品質判定では保留ですが、参考値として表示しています。');
   if (!pose) notes.push('カメラ設定が不足しているため距離を表示できません。');
   notes.push(`BBox信頼度 ${(obj.confidence * 100).toFixed(0)}%`);
@@ -285,6 +338,7 @@ async function runScan() {
       cv: state.cv
     });
     state.lastResult.pose_mode = camera.mode;
+    state.lastResult.camera_fov = {horizontal_fov_deg: Number(els.fovInput.value), source: state.fovSource, exif_status: state.exifFov?.status ?? 'none'};
     showScreen('result');
     state.selectedIndex = state.lastResult.objects.length ? 0 : null;
     renderResultCanvas();
@@ -336,17 +390,25 @@ function stopCamera() {
 
 async function captureFrame() {
   if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) return;
+  const sequence = ++state.imageSequence;
   cameraCanvas.width = cameraVideo.videoWidth;
   cameraCanvas.height = cameraVideo.videoHeight;
   const ctx = cameraCanvas.getContext('2d');
   ctx.drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
   const bitmap = await createImageBitmap(cameraCanvas);
+  if (sequence !== state.imageSequence) { bitmap.close(); return; }
   await setSourceFromBitmap(bitmap);
+  applyExifFov(null);
 }
 
 async function handleFileInput(file) {
+  const sequence = ++state.imageSequence;
   const bitmap = await createImageBitmap(file);
+  // Parse the *original* file before the canvas removes the metadata.
+  const exif = await readExifFov(file, {width: bitmap.width, height: bitmap.height});
+  if (sequence !== state.imageSequence) { bitmap.close(); return; }
   await setSourceFromBitmap(bitmap);
+  applyExifFov(exif);
 }
 
 function registerServiceWorker() {
@@ -381,6 +443,9 @@ function saveResultJson() {
 function bindEvents() {
   document.querySelectorAll('[data-back]').forEach(btn => btn.addEventListener('click', () => showScreen(btn.dataset.back)));
   els.thresholdInput.addEventListener('input', () => { els.thresholdLabel.value = Number(els.thresholdInput.value).toFixed(2); });
+  els.fovInput.addEventListener('input', () => markManualFov(false));
+  els.reviewFovInput.addEventListener('input', () => markManualFov(true));
+  els.useExifFovButton.addEventListener('click', () => applyExifFov(state.exifFov));
   els.openCameraButton.addEventListener('click', async () => {
     try { await startCamera(); } catch (error) { alert(`カメラを開始できません: ${error.message}`); }
   });
