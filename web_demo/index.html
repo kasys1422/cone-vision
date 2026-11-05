@@ -49,9 +49,11 @@
             <label>台座幅 [m]
               <input id="baseWidthInput" type="number" min="0.1" step="0.001">
             </label>
-            <label>推定HFOV [deg]
-              <input id="fovInput" type="number" min="20" max="120" step="1" value="60">
+            <label>水平画角 HFOV [deg]（自動／手動）
+              <input id="fovInput" type="number" min="4" max="175" step="0.01" value="60">
             </label>
+            <p id="fovStatus" class="fov-status" data-status="manual" role="status" aria-live="polite">写真を選ぶとEXIFから画角を推定します。EXIFがない場合は手動設定です。</p>
+            <button id="useExifFovButton" class="ghost-button small hidden" type="button">EXIFの画角に戻す</button>
             <label>検出しきい値
               <input id="thresholdInput" type="range" min="0.05" max="0.9" step="0.01" value="0.5">
               <output id="thresholdLabel">0.50</output>
@@ -104,6 +106,10 @@
         </div>
         <div class="preview-card">
           <canvas id="reviewCanvas"></canvas>
+        </div>
+        <div class="review-fov">
+          <div id="reviewFovStatus" class="review-fov-status" role="status" aria-live="polite">画角を確認しています</div>
+          <label>水平画角 <input id="reviewFovInput" type="number" min="4" max="175" step="0.01" value="60"> °</label>
         </div>
         <div class="review-actions">
           <button id="retakeButton" class="secondary-button">撮り直し</button>
