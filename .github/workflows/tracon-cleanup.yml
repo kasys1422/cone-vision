@@ -1,0 +1,24 @@
+name: Remove temporary TraCon inspection artifact
+on:
+  push:
+    branches: [experiment/tracon-v9]
+    paths: [.github/workflows/tracon-cleanup.yml]
+permissions:
+  actions: write
+  contents: read
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Delete only the temporary artifact created by this annotation session
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status=$(curl --silent --output /tmp/delete-response --write-out '%{http_code}' \
+            --request DELETE \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            https://api.github.com/repos/kasys1422/cone-vision/actions/artifacts/13390891834)
+          case "$status" in 204|404) echo 'Temporary inspection artifact removed or already absent.';; *) cat /tmp/delete-response; exit 1;; esac
