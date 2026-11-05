@@ -1,0 +1,34 @@
+{
+  "K": [
+    [
+      279.3699098917532,
+      0.0,
+      127.5
+    ],
+    [
+      0.0,
+      279.3699098917532,
+      127.5
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "distortion": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "image_size": [
+    256,
+    256
+  ],
+  "cone_height_m": 0.7,
+  "base_width_m": 0.36371082461880055,
+  "dimension_source": "Known synthetic scene dimensions, not a physical cone measurement",
+  "synthetic": true
+}

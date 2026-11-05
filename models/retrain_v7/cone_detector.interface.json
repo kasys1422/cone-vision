@@ -1,0 +1,107 @@
+{
+  "model": "cone_detector",
+  "architecture_id": "yolox_nano",
+  "architecture": "Official YOLOX-Nano, width .25, depth .33, depthwise, one class",
+  "input": {
+    "name": "images",
+    "shape": [
+      1,
+      3,
+      256,
+      256
+    ],
+    "dtype": "float32",
+    "range": [
+      0,
+      1
+    ],
+    "color": "RGB"
+  },
+  "outputs": [
+    {
+      "name": "predictions",
+      "shape": [
+        1,
+        1344,
+        6
+      ],
+      "description": "decoded cx,cy,width,height,objectness,class_probability in256input pixel coordinates"
+    }
+  ],
+  "preprocess": {
+    "resize": "bilinear letterbox; round(w*r),round(h*r)",
+    "r": "min(256/original_width,256/original_height)",
+    "padding": "floor((256-resized_width)/2),floor((256-resized_height)/2)",
+    "fill_rgb": [
+      114,
+      114,
+      114
+    ],
+    "scale_x": "resized_width/original_width",
+    "scale_y": "resized_height/original_height"
+  },
+  "postprocess": {
+    "score": "objectness*class_probability",
+    "pre_nms_top_k": 1000,
+    "box": "[cx-w/2,cy-h/2,cx+w/2,cy+h/2]",
+    "inverse": "subtract integer letterbox padding and divide x/y by actual resize scale independently",
+    "clip": "clip bbox to original image; discard width<=1 or height<=1",
+    "nms_iou": 0.5,
+    "max_detections": 100
+  },
+  "recommended_threshold": 0.5,
+  "threshold_selection": "Fixed 0.50 for controlled comparison; not recalibrated on the tiny real test set.",
+  "licenses": {
+    "weights": "CC-BY-SA-4.0 for this adapted model; retain prior CC-BY-SA-3.0 and data attributions",
+    "own_code": "GPL-3.0-only",
+    "vendor_model_code": "Apache-2.0"
+  },
+  "class_names": [
+    "traffic_cone"
+  ],
+  "n_parameters": 896754,
+  "onnx_bytes": 3669893,
+  "opset": 17,
+  "onnx_operators": [
+    "Add",
+    "Cast",
+    "Concat",
+    "Constant",
+    "Conv",
+    "Exp",
+    "Expand",
+    "MaxPool",
+    "Mul",
+    "Reshape",
+    "Resize",
+    "Shape",
+    "Sigmoid",
+    "Slice",
+    "Transpose",
+    "Unsqueeze"
+  ],
+  "training_manifest_sha256": "077110033a6224c1082c198b78cf14cd02a13cae8e692242646f18d5611b0f8d",
+  "pretrained_weights": {
+    "source": "models/real_v3",
+    "kind": "previous checkpoint; see parent hashes and earlier real-data lineage"
+  },
+  "cautions": [
+    "Synthetic v6 complete labels only in this fine-tuning; earlier v3 training lineage retained",
+    "Not a production qualified real-world detector",
+    "Confidence not calibrated",
+    "Known physical dimensions and camera calibration required for metric output"
+  ],
+  "source_checkpoint": "models/retrain_v7/cone_detector.pt",
+  "training_revision": "v7",
+  "production_ready": false,
+  "onnx_sha256": "305fa8cf092a1d8cc4896cf8a0c8ccaa14f412a8368a945a50d73318332d2430",
+  "checkpoint_sha256": "65ea45dd64dd30562e471d4aeb5ec57dcb8ca69bd72c286b80eda4b77e233a58",
+  "limitations": [
+    "No new real data; cannot establish real generalization",
+    "C4 ambiguity; coordinates confined to ROI",
+    "No real metric ground truth",
+    "No new browser/WebGPU execution test"
+  ],
+  "revision": "v7",
+  "real_world_validated": false
+}

@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "variant": "default",
+  "source_file": "assets/cone/ColorCone_Basic_Red.fbx",
+  "source_sha256": "de72631da21c5f3be718fd0f4d13ecd67227ac03aff1cbd00ba2b2dc183fb600",
+  "source_author": "Mugicha3G",
+  "source_url": "https://mugicha3.booth.pm/items/4001203",
+  "source_license": "CC-BY-SA-3.0",
+  "source_units": "FBX cm, model scale100 => mesh coordinate is metre",
+  "original_height_m": 0.7313502430915833,
+  "target_height_m": 0.7,
+  "uniform_scale": 0.9571337489968436,
+  "physical_dimensions_verified": false,
+  "dimension_note": "0.7m is a configured simulation scale, not a measurement of a physical cone.",
+  "local_axes": "X,Y on ground; +Z upward; origin at original central ground plane",
+  "keypoint_names": [
+    "tip",
+    "base_xminus_yminus",
+    "base_xplus_yminus",
+    "base_xplus_yplus",
+    "base_xminus_yplus"
+  ],
+  "source_vertex_indices": [
+    602,
+    58,
+    40,
+    0,
+    22
+  ],
+  "keypoints_3d": [
+    [
+      0.002047294816416777,
+      -0.0011363669776675606,
+      0.7
+    ],
+    [
+      -0.17913957726722715,
+      -0.17939400429714014,
+      0.0
+    ],
+    [
+      0.17913957726722715,
+      -0.17939400429714014,
+      0.0
+    ],
+    [
+      0.17913957726722715,
+      0.17939400429714014,
+      0.0
+    ],
+    [
+      -0.17913957726722715,
+      0.17939400429714014,
+      0.0
+    ]
+  ],
+  "height_m": 0.7,
+  "base_width_m": 0.36371082461880055,
+  "bounds_m": [
+    [
+      -0.18224317627492242,
+      -0.18185542428981988,
+      0.0
+    ],
+    [
+      0.18185542428981988,
+      0.1823836466946552,
+      0.7
+    ]
+  ],
+  "symmetry": "Approximate C4; cyclic corner permutations only, no reflections.",
+  "symmetry_note": "The source has sub-mm unequal base axes and an off-axis tip (~2mm). All four yaw candidates remain ambiguous. Small reprojection differences must not be interpreted as absolute-yaw observability.",
+  "anchor_definition": "Tip: highest original mesh vertex. Base: original ground-plane vertex maximizing +/-X+/-Y, four cyclic corners. No BBox-derived or hand-placed labels.",
+  "vertices": 1513,
+  "triangles": 2976
+}

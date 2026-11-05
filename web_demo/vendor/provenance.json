@@ -1,0 +1,19 @@
+{
+  "source_url": "https://docs.opencv.org/4.x/opencv.js",
+  "resolved_runtime_version": "4.13.0",
+  "retrieved_date": "2026-11-02",
+  "sha256": "63366510248adf3a7eddf3e793dd825404efb7df3749f4d6f8557c7fa4ca8aa0",
+  "bytes": 10964323,
+  "license": "Apache-2.0",
+  "license_file": "OpenCV-LICENSE.txt",
+  "bindings_verified": [
+    "solvePnP",
+    "SOLVEPNP_SQPNP",
+    "SOLVEPNP_EPNP",
+    "SOLVEPNP_IPPE",
+    "Rodrigues",
+    "projectPoints"
+  ],
+  "unavailable_binding": "solvePnPGeneric",
+  "distribution": "Unmodified official browser JS including embedded WASM. Pinned by bundled bytes and SHA; original 4.x URL is mutable."
+}

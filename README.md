@@ -1,55 +1,45 @@
 # Cone Vision
 
-ブラウザ内で交通コーンを検出し、先端＋台座4隅の5点から距離・姿勢を推定する実験的なWebアプリです。GitHub Pagesでの静的配信を想定しています。
+スマートフォンのカメラや写真から交通コーンを検出し、選択したコーンの5点特徴点・距離を表示する **実験用PWA** です。推論は端末内で動作します。
 
-## 現在の状態
+## 操作
 
-- **リポジトリ初期化段階**。Webデモ・ONNXモデルは、まだこのリポジトリに含まれていません。
-- 採用候補は **v7**（物体検出：YOLOX-Nano、特徴点：独立した軽量CNN）。学習済みモデルは別途作成・評価済みです。
-- **実写向け完成版ではありません。** v7は合成テストで改善しましたが、実写画像では背景への誤検出が残り、以前のモデルより誤検出が増えた例があります。
-- 実寸とカメラ校正がない画像には、メートル単位の距離を表示しない方針です。
+1. 「カメラで撮影する」または「ギャラリーから画像を選択」
+2. 写真を確認して「スキャンする」
+3. 検出されたコーンを画像上または一覧から選択
+4. 距離、奥行き、検出スコアを確認
 
-## 計画する機能
+GitHub Pagesにデプロイすると `https://kasys1422.github.io/cone-vision/` で利用できます。
 
-- 写真／カメラ映像からの複数コーン検出
-- BBox・5点キーポイントの重ね合わせ
-- カメラ内部パラメータと実物寸法に基づくPnP
-- 信頼性が低い測距の保留、および結果JSONの出力
-- ONNX Runtime Web（WASM・対応ブラウザのWebGPU）とOpenCV.js
-- サーバーで画像を処理しないクライアント側推論
+## ローカル実行
 
-## 配置予定
-
-```text
-cone-vision/
-├── README.md
-├── LICENSE
-├── THIRD_PARTY_NOTICES.md
-├── assets/
-│   └── cone_geometry.json
-├── models/
-│   └── retrain_v7/
-│       ├── cone_detector.onnx
-│       ├── cone_detector.interface.json
-│       ├── cone_keypoints.onnx
-│       └── cone_keypoints.interface.json
-├── web_demo/
-│   ├── index.html
-│   ├── inference.mjs
-│   ├── pnp.mjs
-│   ├── vendor/
-│   └── samples/
-└── docs/
-    ├── DEPLOYMENT.md
-    └── MODEL_STATUS.md
+```bash
+python -m http.server 8877
 ```
 
-実際の配置と公開前の確認方法は [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) を参照してください。**READMEに構成が記載されていても、アップロードされていないモデル／Webアプリが存在することを意味しません。**
+`http://localhost:8877/` を開きます。カメラは原則HTTPSまたはlocalhostが必要です。初回はONNX Runtime WebをCDNから読み込むためインターネット接続が必要です。
 
-## ライセンスと素材
+## モデル
 
-独自ソースコード: GPL-3.0-only（[LICENSE](LICENSE)）。学習済みモデル・提供3D素材・第三者ライブラリには別の利用条件があるため、モデルと素材を追加する際に出典・ライセンス・変更履歴も同時に収録してください。
+- **物体検出器**: YOLOX-Nano、RGB 256×256入力 (`models/retrain_v7/cone_detector.onnx`)
+- **5点推定器**: 軽量CNN、RGB 96×96 ROI入力 (`models/retrain_v7/cone_keypoints.onnx`)
+- **姿勢・距離**: OpenCV.jsによるC4対称性を考慮したPnP。計算にはコーンの実寸とカメラ内部パラメータが必要です。
 
-## 注意
+`web_demo/` は静的アプリで、画像・映像をサーバーに送信しません。モデル実行はWebGPUまたはWASMです（端末・ブラウザに依存）。
 
-研究・試作向けです。安全用途・規制用途・車両運転支援等に使用しないでください。正確な実写測距には実寸の測定、カメラ校正、独立した実写評価が必要です。
+## 測距に関する注意
+
+**V7は実写向けに検証が完了したモデルではありません。** 合成データでは改善しましたが、実写の背景誤検出が残っています。初期画面の画角（HFOV）入力で求める値は概算であり、校正値ではありません。実際の距離はカメラ校正およびコーン高さ・台座幅の実測値を用いてください。
+
+PnPの再投影誤差が小さくても、誤検出した背景に距離が出る可能性があります。研究・試作用であり、交通安全上の判断には使用できません。
+
+## 構成
+
+- `web_demo/`: PWA UI、カメラ、画像入力、BBox/特徴点表示、PnP、Service Worker
+- `models/retrain_v7/`: V7モデル、入出力仕様、モデルカード
+- `assets/cone_geometry.json`: 3D特徴点と寸法設定
+- `THIRD_PARTY_NOTICES.md`: 依存関係・素材の利用条件
+
+## ライセンス
+
+独自コード GPL-3.0-only。モデル・3D素材等は別ライセンスです。詳細は `THIRD_PARTY_NOTICES.md` と `models/retrain_v7/MODEL_CARD.md` を参照してください。
