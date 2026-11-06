@@ -1,166 +1,307 @@
 <!doctype html>
 <html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#ff7a00">
-  <title>Cone Vision</title>
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./icons/icon-192.png">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png">
-  <link rel="stylesheet" href="./styles.css">
-</head>
-<body>
-  <div class="app-shell">
-    <header class="app-header">
-      <div class="brand-wrap">
-        <div class="brand-icon">🚧</div>
-        <div>
-          <div class="eyebrow">PWA / camera app prototype</div>
-          <h1>Cone Vision</h1>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#ff7a00" />
+    <title>Cone Vision</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand-wrap">
+          <div class="brand-icon" aria-hidden="true">
+            <svg
+              viewBox="0 0 32 32"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            >
+              <path d="m9 25 6-21h2l6 21M7 25h18v4H7Z" />
+              <path d="M13 11h6M11 18h10" />
+            </svg>
+          </div>
+          <div>
+            <h1>Cone Vision</h1>
+          </div>
         </div>
-      </div>
-      <button id="installButton" class="ghost-button hidden">インストール</button>
-    </header>
+        <button id="installButton" class="ghost-button hidden">
+          インストール
+        </button>
+      </header>
 
-    <main>
-      <section id="homeScreen" class="screen active">
-        <div class="hero-card">
-          <div class="hero-illustration">🚧</div>
-          <h2>交通コーンの距離を推定</h2>
-          <p>写真を撮るか画像を読み込み、コーンを選んで距離を確認します。</p>
-          <div class="feature-pills">
-            <span>PWA</span><span>コーン検出</span><span>5点推定</span><span>距離表示</span>
-          </div>
-        </div>
-        <div class="action-stack">
-          <button id="openCameraButton" class="primary-button big-button">📷 カメラで撮影する</button>
-          <label class="secondary-button big-button upload-label">
-            🖼️ ギャラリーから画像を選択
-            <input id="imageInput" type="file" accept="image/*">
-          </label>
-        </div>
-        <details class="settings-card">
-          <summary>設定</summary>
-          <div class="settings-grid">
-            <label>コーン高さ [m]
-              <input id="coneHeightInput" type="number" min="0.1" step="0.001">
-            </label>
-            <label>台座幅 [m]
-              <input id="baseWidthInput" type="number" min="0.1" step="0.001">
-            </label>
-            <label>水平画角 HFOV [deg]（自動／手動）
-              <input id="fovInput" type="number" min="4" max="175" step="0.01" value="60">
-            </label>
-            <p id="fovStatus" class="fov-status" data-status="manual" role="status" aria-live="polite">写真を選ぶとEXIFから画角を推定します。EXIFがない場合は手動設定です。</p>
-            <button id="useExifFovButton" class="ghost-button small hidden" type="button">EXIFの画角に戻す</button>
-            <label>検出しきい値
-              <input id="thresholdInput" type="range" min="0.05" max="0.9" step="0.01" value="0.5">
-              <output id="thresholdLabel">0.50</output>
-            </label>
-            <label class="checkbox-row"><input id="useWebGPUInput" type="checkbox"> WebGPUを優先</label>
-            <label class="checkbox-row"><input id="refineRoiInput" type="checkbox"> ROI再推定（実験）</label>
-            <label>カメラ校正JSON
-              <input id="cameraJsonInput" type="file" accept=".json,application/json">
+      <main>
+        <section id="homeScreen" class="screen active">
+          <div class="action-stack">
+            <button id="openCameraButton" class="primary-button big-button">
+              <span class="action-icon" aria-hidden="true"
+                ><svg
+                  viewBox="0 0 32 32"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                >
+                  <path
+                    d="M11 8 13 5h6l2 3h5a3 3 0 0 1 3 3v13a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V11a3 3 0 0 1 3-3Z"
+                  />
+                  <circle cx="16" cy="17" r="6" /></svg></span
+              ><span>撮影する</span><span aria-hidden="true">↗</span>
+            </button>
+            <label class="secondary-button big-button upload-label">
+              <span class="action-icon" aria-hidden="true"
+                ><svg
+                  viewBox="0 0 32 32"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                >
+                  <rect x="3" y="4" width="26" height="24" rx="3" />
+                  <circle cx="11" cy="12" r="3" />
+                  <path d="m4 24 8-8 6 6 4-4 7 7" /></svg></span
+              ><span>画像を選ぶ</span><span aria-hidden="true">＋</span>
+              <input id="imageInput" type="file" accept="image/*" />
             </label>
           </div>
-        </details>
-        <section class="note-card">
-          <h3>初期版の流れ</h3>
-          <ol>
-            <li>撮影または画像選択</li>
-            <li>スキャン</li>
-            <li>コーン選択</li>
-            <li>距離表示</li>
-          </ol>
+          <details class="settings-card">
+            <summary>コーンの寸法・カメラ設定</summary>
+            <div class="settings-grid">
+              <label
+                >コーン高さ [m]
+                <input
+                  id="coneHeightInput"
+                  type="number"
+                  min="0.1"
+                  step="0.001"
+                />
+              </label>
+              <label
+                >台座幅 [m]
+                <input
+                  id="baseWidthInput"
+                  type="number"
+                  min="0.1"
+                  step="0.001"
+                />
+              </label>
+              <label
+                >水平画角 HFOV [deg]（自動／手動）
+                <input
+                  id="fovInput"
+                  type="number"
+                  min="4"
+                  max="175"
+                  step="0.01"
+                  value="60"
+                />
+              </label>
+              <p
+                id="fovStatus"
+                class="fov-status"
+                data-status="manual"
+                role="status"
+                aria-live="polite"
+              >
+                写真を選ぶとEXIFから画角を推定します。EXIFがない場合は手動設定です。
+              </p>
+              <button
+                id="useExifFovButton"
+                class="ghost-button small hidden"
+                type="button"
+              >
+                EXIFの画角に戻す
+              </button>
+              <label>検出モデル
+                <select id="detectorProfile">
+                  <option value="v12_default">YOLOX-Nano V10（標準）</option>
+                  <option value="tracon_v12">SSDLite V12（実写）</option>
+                  <option value="v12_mixed">SSDLite V12（実写＋合成）</option>
+                </select>
+              </label>
+              <label
+                >検出しきい値
+                <input
+                  id="thresholdInput"
+                  type="range"
+                  min="0.05"
+                  max="0.9"
+                  step="0.01"
+                  value="0.5"
+                />
+                <output id="thresholdLabel">0.50</output>
+              </label>
+              <label class="checkbox-row"
+                ><input id="useWebGPUInput" type="checkbox" />
+                WebGPUを優先</label
+              >
+              <label class="checkbox-row"
+                ><input id="refineRoiInput" type="checkbox" />
+                ROI再推定（実験）</label
+              >
+              <label
+                >カメラ校正JSON
+                <input
+                  id="cameraJsonInput"
+                  type="file"
+                  accept=".json,application/json"
+                />
+              </label>
+            </div>
+          </details>
         </section>
-      </section>
 
-      <section id="captureScreen" class="screen">
-        <div class="topbar">
-          <button class="icon-button" data-back="home">←</button>
-          <div>
-            <div class="topbar-title">撮影</div>
-            <div class="topbar-subtitle">交通コーンが十分入るように撮影してください</div>
-          </div>
-        </div>
-        <div class="preview-card camera-card">
-          <video id="cameraVideo" autoplay playsinline muted></video>
-          <canvas id="cameraCanvas" class="hidden"></canvas>
-          <div class="guide-frame"></div>
-        </div>
-        <div class="camera-controls">
-          <button id="closeCameraButton" class="secondary-button">キャンセル</button>
-          <button id="captureButton" class="capture-button" aria-label="capture"></button>
-          <button id="switchCameraButton" class="secondary-button">切替</button>
-        </div>
-      </section>
-
-      <section id="reviewScreen" class="screen">
-        <div class="topbar">
-          <button class="icon-button" data-back="home">←</button>
-          <div>
-            <div class="topbar-title">スキャン準備</div>
-            <div class="topbar-subtitle">写真を確認してから解析します</div>
-          </div>
-        </div>
-        <div class="preview-card">
-          <canvas id="reviewCanvas"></canvas>
-        </div>
-        <div class="review-fov">
-          <div id="reviewFovStatus" class="review-fov-status" role="status" aria-live="polite">画角を確認しています</div>
-          <label>水平画角 <input id="reviewFovInput" type="number" min="4" max="175" step="0.01" value="60"> °</label>
-        </div>
-        <div class="review-actions">
-          <button id="retakeButton" class="secondary-button">撮り直し</button>
-          <button id="scanButton" class="primary-button">スキャンする</button>
-        </div>
-      </section>
-
-      <section id="resultScreen" class="screen">
-        <div class="topbar">
-          <button class="icon-button" data-back="review">←</button>
-          <div>
-            <div class="topbar-title">解析結果</div>
-            <div class="topbar-subtitle" id="resultSubtitle">コーンを選択してください</div>
-          </div>
-          <button id="rescanButton" class="ghost-button small">再スキャン</button>
-        </div>
-        <div class="preview-card result-card">
-          <canvas id="resultCanvas"></canvas>
-          <button id="loadingOverlay" class="loading-overlay hidden" disabled>
-            <span class="spinner"></span>
-            <span>スキャン中…</span>
-          </button>
-        </div>
-        <div class="bottom-sheet">
-          <div class="sheet-handle"></div>
-          <section class="selection-panel">
-            <div class="panel-header">
-              <h3>検出されたコーン</h3>
-              <span id="objectCountBadge" class="count-badge">0</span>
+        <section id="captureScreen" class="screen">
+          <div class="topbar">
+            <button
+              class="icon-button"
+              aria-label="ホームへ戻る"
+              data-back="home"
+            >
+              ←
+            </button>
+            <div>
+              <div class="topbar-title">撮影</div>
             </div>
-            <div id="coneList" class="cone-list empty">まだ解析していません</div>
-          </section>
-          <section id="detailPanel" class="detail-panel hidden">
-            <div class="panel-header">
-              <h3>選択中のコーン</h3>
-              <button id="saveResultButton" class="ghost-button small">結果JSON保存</button>
-            </div>
-            <div class="metric-grid">
-              <div class="metric-item"><span>距離</span><strong id="distanceValue">—</strong></div>
-              <div class="metric-item"><span>奥行き</span><strong id="depthValue">—</strong></div>
-              <div class="metric-item"><span>信頼度</span><strong id="confidenceValue">—</strong></div>
-              <div class="metric-item"><span>測距方式</span><strong id="modeValue">—</strong></div>
-            </div>
-            <p id="detailNote" class="detail-note">コーンを選ぶと詳細が表示されます。</p>
-          </section>
-        </div>
-      </section>
-    </main>
-  </div>
+          </div>
+          <div class="preview-card camera-card">
+            <video id="cameraVideo" autoplay playsinline muted></video>
+            <canvas id="cameraCanvas" class="hidden"></canvas>
+            <div class="guide-frame"></div>
+          </div>
+          <div class="camera-controls">
+            <button id="closeCameraButton" class="secondary-button">
+              キャンセル
+            </button>
+            <button
+              id="captureButton"
+              class="capture-button"
+              aria-label="写真を撮る"
+            ></button>
+            <button id="switchCameraButton" class="secondary-button">
+              切替
+            </button>
+          </div>
+        </section>
 
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.webgpu.min.js"></script>
-  <script type="module" src="./app.mjs"></script>
-</body>
+        <section id="reviewScreen" class="screen">
+          <div class="topbar">
+            <button
+              class="icon-button"
+              aria-label="ホームへ戻る"
+              data-back="home"
+            >
+              ←
+            </button>
+            <div>
+              <div class="topbar-title">写真を確認</div>
+            </div>
+          </div>
+          <div class="preview-card">
+            <canvas id="reviewCanvas"></canvas>
+          </div>
+          <div class="review-fov">
+            <div
+              id="reviewFovStatus"
+              class="review-fov-status"
+              role="status"
+              aria-live="polite"
+            >
+              画角を確認しています
+            </div>
+            <label
+              >水平画角
+              <input
+                id="reviewFovInput"
+                type="number"
+                min="4"
+                max="175"
+                step="0.01"
+                value="60"
+              />
+              °</label
+            >
+          </div>
+          <div class="review-actions">
+            <button id="retakeButton" class="secondary-button">撮り直し</button>
+            <button id="scanButton" class="primary-button">スキャンする</button>
+          </div>
+        </section>
+
+        <section id="resultScreen" class="screen">
+          <div class="topbar">
+            <button
+              class="icon-button"
+              aria-label="写真の確認へ戻る"
+              data-back="review"
+            >
+              ←
+            </button>
+            <div>
+              <div class="topbar-title">解析結果</div>
+              <div
+                id="resultSubtitle"
+                class="sr-only"
+                role="status"
+                aria-live="polite"
+              ></div>
+            </div>
+            <button id="rescanButton" class="ghost-button small">
+              再スキャン
+            </button>
+          </div>
+          <div class="preview-card result-card">
+            <canvas id="resultCanvas"></canvas>
+            <button id="loadingOverlay" class="loading-overlay hidden" disabled>
+              <span class="spinner"></span>
+              <span>スキャン中…</span>
+            </button>
+          </div>
+          <div class="bottom-sheet">
+            <section class="selection-panel">
+              <div class="panel-header">
+                <h3>検出されたコーン</h3>
+                <span id="objectCountBadge" class="count-badge">0</span>
+              </div>
+              <div id="coneList" class="cone-list empty">
+                まだ解析していません
+              </div>
+            </section>
+            <section id="detailPanel" class="detail-panel hidden">
+              <div class="panel-header">
+                <h3 id="selectedConeTitle">コーン</h3>
+                <button id="saveResultButton" class="ghost-button small">
+                  結果JSON保存
+                </button>
+              </div>
+              <div class="metric-grid">
+                <div class="metric-item distance-metric">
+                  <span>コーンまでの距離</span
+                  ><strong id="distanceValue">—</strong>
+                </div>
+                <div class="metric-item">
+                  <span>奥行き</span><strong id="depthValue">—</strong>
+                </div>
+                <div class="metric-item">
+                  <span>検出スコア</span><strong id="confidenceValue">—</strong>
+                </div>
+                <div class="metric-item">
+                  <span>測距方式</span><strong id="modeValue">—</strong>
+                </div>
+              </div>
+              <p id="detailNote" class="detail-note"></p>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.webgpu.min.js"></script>
+    <script type="module" src="./app.mjs"></script>
+  </body>
 </html>

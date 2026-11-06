@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "model": "cone_keypoints",
+  "architecture": "local_patch192",
+  "input": {
+    "name": "images",
+    "shape": [
+      1,
+      3,
+      192,
+      192
+    ],
+    "dtype": "float32",
+    "color": "RGB",
+    "normalization": "uint8 / 255"
+  },
+  "outputs": {
+    "coordinates": {
+      "shape": [
+        1,
+        5,
+        2
+      ],
+      "units": "ROI normalized",
+      "order": "x,y"
+    },
+    "confidence": {
+      "shape": [
+        1,
+        5
+      ],
+      "calibrated": false,
+      "meaning": "heatmap concentration multiplied by point-quality head trained using known point error and negative ROIs; not calibrated probability"
+    },
+    "visibility": {
+      "shape": [
+        1,
+        5,
+        3
+      ],
+      "classes": [
+        "outside_image",
+        "occluded",
+        "visible"
+      ]
+    }
+  },
+  "roi": {
+    "square": true,
+    "padding": 1.2,
+    "size": 192,
+    "fill": 114,
+    "interpolation": "bilinear",
+    "mapping": "u=(x-x0)*192/side; v=(y-y0)*192/side; integer pixel centers"
+  },
+  "corner_symmetry": "C4 cyclic permutation, 90 degree yaw ambiguity; no reflection equivalence",
+  "limitations": [
+    "Observed-keypoint test 15 objects in 7 source groups; inferred corner consistency is not accuracy",
+    "No real metric distance test",
+    "No new browser/WebGPU execution test"
+  ],
+  "source_checkpoint": "cone_keypoints.pt",
+  "quality_head": true,
+  "onnx_bytes": 1471390,
+  "onnx_sha256": "3a903b9b6e33ffc3461f1a042c3309983d8f2ecfe5145acc5a63aa1d553576c8",
+  "checkpoint_sha256": "66810b427f3115d448ca361438e56a971687705c0df649ae2ba6e1ac2907b72a",
+  "production_ready": false,
+  "training_revision": "tracon_v12_candidate",
+  "point_identity": "C4 representative; absolute physical corner phase unknown",
+  "pretrained_weights": {
+    "source": "models/tracon_v10",
+    "sha256": "ed554c189644201dac1c462a52a9823eb129ce587769628bbfdaf5902bfad4a4"
+  },
+  "cautions": [
+    "Small reviewed TraCon subset; no independent human annotation audit",
+    "Real observed and weakly completed points are labelled separately; neither supplies metric 3D truth",
+    "No TraCon source images redistributed",
+    "C4 corner phase ambiguous",
+    "Model confidence is not calibrated",
+    "Do not infer meter accuracy from real 2D tests"
+  ],
+  "revision": "tracon_v12_candidate",
+  "real_world_validated": false
+}

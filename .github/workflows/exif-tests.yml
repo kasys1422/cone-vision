@@ -1,4 +1,4 @@
-name: EXIF field-of-view tests
+name: Web tests
 
 on:
   push:
@@ -14,5 +14,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Run EXIF tests
-        run: node --test tests/exif_fov.test.mjs
+      - name: Run Web tests
+        run: node --test tests/*.test.mjs

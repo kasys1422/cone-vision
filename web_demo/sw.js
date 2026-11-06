@@ -1,4 +1,4 @@
-const CACHE = 'cone-vision-v2-exif';
+const CACHE = 'cone-vision-v12';
 const ASSETS = [
   './',
   './index.html',
@@ -9,11 +9,7 @@ const ASSETS = [
   './pnp.mjs',
   './manifest.webmanifest',
   './packed_loader.mjs',
-  '../.payload/detector/part-000.txt',
-  '../.payload/detector/part-001.txt',
-  '../.payload/detector/part-002.txt',
-  '../.payload/detector/part-003.txt',
-  '../.payload/detector/part-004.txt',
+  '../models/tracon_v12/yolox_v10.onnx',
   '../.payload/opencv/part-000.txt',
   '../.payload/opencv/part-001.txt',
   '../.payload/opencv/part-002.txt',
@@ -21,9 +17,9 @@ const ASSETS = [
   '../.payload/opencv/part-004.txt',
   './vendor/OpenCV-LICENSE.txt',
   '../assets/cone_geometry.json',
-  '../models/retrain_v7/cone_keypoints.onnx',
-  '../models/retrain_v7/cone_detector.interface.json',
-  '../models/retrain_v7/cone_keypoints.interface.json',
+  '../models/tracon_v12/cone_keypoints.onnx',
+  '../models/tracon_v12/cone_detector.interface.json',
+  '../models/tracon_v12/cone_keypoints.interface.json',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
@@ -33,7 +29,7 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('cone-vision-') && key !== CACHE).map(key => caches.delete(key))))
     .then(() => self.clients.claim()));
 });
 

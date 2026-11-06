@@ -13,7 +13,8 @@ export function scaleGeometry(geometry, heightM, baseWidthM = null) {
 }
 
 export function poseSettingsForRoi(roi) {
-  const scale = Math.max(1, roi.side / (roi.size ?? 96));
+  // Keep the original 96px calibration for every sampling resolution.
+  const scale = Math.max(1, roi.side / 96);
   return {measurementSigmaPx: 1.5*scale, maxReprojectionPx: 6*scale};
 }
 

@@ -64,3 +64,7 @@ Packages can include third-party notices beyond the top-level license. Installat
 ## Compared but not imported
 
 - Ultralytics YOLO: AGPL-3.0 / enterprise options (<https://www.ultralytics.com/license>); no code or weights used. A GPL project should not silently relabel AGPL-covered components as GPL-only. Commercial/noncommercial status alone does not decide copyleft obligations.
+
+## V12
+
+Source lineage, COCO initialization and learned weights are documented in [V12 provenance](models/tracon_v12/PROVENANCE.md). Training and evaluation used the existing project's TraCon and synthetic v6 records. Original third-party photographs are excluded from distribution.

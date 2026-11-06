@@ -35,6 +35,26 @@ function bilinear(data, width, height, x, y, c, fill, quantize = false, clampEdg
   return Math.round(value);
 }
 
+// Torchvision SSDLite resizes both axes independently, in floating point.
+export function ssdInput({data, width, height}, size) {
+  const tensor = new Float32Array(3 * size * size);
+  const sx = size / width, sy = size / height;
+  for (let y = 0; y < size; y++) {
+    const fy = clip((y + .5) / sy - .5, 0, height - 1);
+    const y0 = Math.floor(fy), y1 = Math.min(y0 + 1, height - 1), dy = fy - y0;
+    for (let x = 0; x < size; x++) {
+      const fx = clip((x + .5) / sx - .5, 0, width - 1);
+      const x0 = Math.floor(fx), x1 = Math.min(x0 + 1, width - 1), dx = fx - x0;
+      for (let c = 0; c < 3; c++) {
+        const top = (1-dx)*data[(y0*width+x0)*4+c] + dx*data[(y0*width+x1)*4+c];
+        const bottom = (1-dx)*data[(y1*width+x0)*4+c] + dx*data[(y1*width+x1)*4+c];
+        tensor[c*size*size+y*size+x] = ((1-dy)*top + dy*bottom) / 255;
+      }
+    }
+  }
+  return {tensor, transform: {sx, sy, left: 0, top: 0, originalWidth: width, originalHeight: height, size}};
+}
+
 export function detectorInput(image, size = 256, cv = null) {
   const {data, width, height} = image;
   const scale = Math.min(size / width, size / height);
@@ -115,7 +135,7 @@ export function decodeDetector(heatmap, geometry, transform, threshold = 0.25, n
     p.bbox_xyxy[3] > p.bbox_xyxy[1] + 1), nmsIou);
 }
 
-export function decodeYolox(predictions, transform, threshold = 0.025, nmsIou = 0.5) {
+export function decodeYolox(predictions, transform, threshold = 0.025, nmsIou = 0.5, topK = 1000, minSide = 1) {
   const candidates = [];
   for (let i = 0; i < predictions.length; i += 6) {
     const confidence = predictions[i + 4] * predictions[i + 5];
@@ -124,13 +144,13 @@ export function decodeYolox(predictions, transform, threshold = 0.025, nmsIou = 
   candidates.sort((a, b) => b.confidence - a.confidence);
   const {sx, sy, left, top, originalWidth, originalHeight} = transform;
   const decoded = [];
-  for (const {i, confidence} of candidates.slice(0, 1000)) {
+  for (const {i, confidence} of candidates.slice(0, topK)) {
     const cx = predictions[i], cy = predictions[i + 1], bw = predictions[i + 2], bh = predictions[i + 3];
     const box = [clip((cx - bw / 2 - left) / sx, 0, originalWidth),
       clip((cy - bh / 2 - top) / sy, 0, originalHeight),
       clip((cx + bw / 2 - left) / sx, 0, originalWidth),
       clip((cy + bh / 2 - top) / sy, 0, originalHeight)];
-    if (box[2] > box[0] + 1 && box[3] > box[1] + 1) decoded.push({bbox_xyxy: box, confidence, class_id: 0});
+    if (box[2] > box[0] + minSide && box[3] > box[1] + minSide) decoded.push({bbox_xyxy: box, confidence, class_id: 0});
   }
   return nms(decoded, nmsIou);
 }
@@ -186,6 +206,24 @@ export function decodeKeypoints(coordinates, confidence, visibility, roi) {
 }
 
 export const DETECTOR_PROFILES = {
+  v12_default: {
+    model: '../models/tracon_v12/yolox_v10.onnx',
+    keypoints_model: '../models/tracon_v12/cone_keypoints.onnx',
+    architecture_id: 'yolox_nano', size: 256, keypoint_size: 192,
+    recommended_threshold: .5, target: '交通コーン'
+  },
+  v12_mixed: {
+    model: '../models/tracon_v12/ssdlite_mixed.onnx',
+    keypoints_model: '../models/tracon_v12/cone_keypoints.onnx',
+    architecture_id: 'ssdlite320_mobilenet_v3_large', size: 320, keypoint_size: 192,
+    recommended_threshold: .5, target: '交通コーン'
+  },
+  tracon_v12: {
+    model: '../models/tracon_v12/cone_detector.onnx',
+    keypoints_model: '../models/tracon_v12/cone_keypoints.onnx',
+    architecture_id: 'ssdlite320_mobilenet_v3_large', size: 320, keypoint_size: 192,
+    recommended_threshold: .5, target: '交通コーン'
+  },
   retrain_v7: {model: '../models/retrain_v7/cone_detector.onnx', keypoints_model: '../models/retrain_v7/cone_keypoints.onnx',
     size: 256, recommended_threshold: .5, architecture_id: 'yolox_nano',
     target: 'Complete-label synthetic v6 retraining; experimental, real-world accuracy not validated'},
@@ -277,16 +315,17 @@ export class ConeVision {
     if (!['baseline', 'roi_refine'].includes(keypointVariant)) throw new Error(`Unsupported keypoint variant: ${keypointVariant}`);
     const started = performance.now();
     const size = this.spec.input?.shape?.[2] ?? this.spec.size ?? 256;
-    const {tensor, transform} = detectorInput(imageData, size, cv);
+    const ssd = this.spec.architecture_id === 'ssdlite320_mobilenet_v3_large';
+    const {tensor, transform} = ssd ? ssdInput(imageData, size) : detectorInput(imageData, size, cv);
     const feeds = {images: new this.ort.Tensor('float32', tensor, [1, 3, size, size])};
     const raw = this.spec.profile === 'coneslayer' ? await this.detector.run(feeds, ['output']) : await this.detector.run(feeds);
     const decoded = raw.predictions ?? raw.output;
-    const detections = decoded ? decodeYolox(decoded.data, transform, threshold, nmsIou) :
+    const detections = decoded ? decodeYolox(decoded.data, transform, threshold, nmsIou, ssd ? 300 : 1000, ssd ? 0 : 1) :
       decodeDetector(raw.heatmap.data, raw.geometry.data, transform, threshold, nmsIou);
     const objects = [];
     const inferKeypoints = async bbox => {
-      const {tensor: roiTensor, roi} = roiInput(imageData, bbox, 96, 1.2, cv);
-      const result = await this.keypoints.run({images: new this.ort.Tensor('float32', roiTensor, [1, 3, 96, 96])});
+      const {tensor: roiTensor, roi} = roiInput(imageData, bbox, this.spec.keypoint_size ?? 96, 1.2, cv);
+      const result = await this.keypoints.run({images: new this.ort.Tensor('float32', roiTensor, [1, 3, roi.size, roi.size])});
       return decodeKeypoints(result.coordinates.data, result.confidence.data, result.visibility.data, roi);
     };
     for (const detection of detections) {
@@ -303,7 +342,7 @@ export class ConeVision {
     return {schema_version: 1, image_size: [imageData.width, imageData.height], objects, K, distortion,
       detector_profile: this.spec.profile ?? 'current', keypoint_model: this.spec.keypoints_model, keypoint_variant: keypointVariant,
       detection_threshold: threshold, detector_target: this.spec.target ?? null,
-      detector_preprocessing: cv ? 'OpenCV INTER_LINEAR uint8 RGB' : 'JavaScript bilinear; native OpenCV rounding may differ',
+      detector_preprocessing: ssd ? 'Torchvision RGB float bilinear stretch' : cv ? 'OpenCV INTER_LINEAR uint8 RGB' : 'JavaScript bilinear; native OpenCV rounding may differ',
       roi_preprocessing: cv ? 'OpenCV warpAffine float32 affine, INTER_LINEAR, border114' : 'JavaScript fixed-point approximation',
       provider: this.provider, time_ms: performance.now() - started,
       notes: ['Corner phase is ambiguous modulo 90 degrees.',

@@ -50,6 +50,7 @@ const els = {
   rescanButton: $('#rescanButton'),
   saveResultButton: $('#saveResultButton'),
   thresholdInput: $('#thresholdInput'),
+  detectorProfile: $('#detectorProfile'),
   thresholdLabel: $('#thresholdLabel'),
   useWebGPUInput: $('#useWebGPUInput'),
   refineRoiInput: $('#refineRoiInput'),
@@ -70,7 +71,8 @@ const els = {
   depthValue: $('#depthValue'),
   confidenceValue: $('#confidenceValue'),
   modeValue: $('#modeValue'),
-  detailNote: $('#detailNote')
+  detailNote: $('#detailNote'),
+  selectedConeTitle: $('#selectedConeTitle')
 };
 
 ort.env.wasm.numThreads = 1;
@@ -85,24 +87,21 @@ function setLoading(loading, label = 'スキャン中…') {
   state.scanning = loading;
   els.loadingOverlay.classList.toggle('hidden', !loading);
   els.loadingOverlay.innerHTML = loading ? `<span class="spinner"></span><span>${label}</span>` : '';
-  els.scanButton.disabled = loading;
+  els.scanButton.textContent = loading ? label : 'スキャンする';
+  els.scanButton.disabled = loading || state.modelLoading || !state.sourceBitmap;
   els.rescanButton.disabled = loading;
 }
 
 function setModelLoading(loading) {
   state.modelLoading = loading;
-  els.scanButton.disabled = loading || !state.sourceImageData;
+  els.detectorProfile.disabled = loading;
+  els.useWebGPUInput.disabled = loading;
+  els.scanButton.disabled = loading || state.scanning || !state.sourceBitmap;
+  if (!state.scanning) els.scanButton.textContent = loading ? 'モデルを準備中…' : 'スキャンする';
 }
 
 function formatMeters(value) {
   return Number.isFinite(value) ? `${value.toFixed(2)} m` : '—';
-}
-
-function confidenceLabel(conf) {
-  const score = Math.round(conf * 100);
-  if (score >= 85) return `高 (${score}%)`;
-  if (score >= 60) return `中 (${score}%)`;
-  return `低 (${score}%)`;
 }
 
 function createApproxK(width, height, hfovDeg) {
@@ -190,7 +189,7 @@ async function loadModels() {
       await Promise.allSettled([state.vision.detector.release(), state.vision.keypoints.release()]);
       state.vision = null;
     }
-    state.vision = await ConeVision.create(ort, {preferWebGPU: els.useWebGPUInput.checked, detectorProfile: 'retrain_v7'});
+    state.vision = await ConeVision.create(ort, {preferWebGPU: els.useWebGPUInput.checked, detectorProfile: els.detectorProfile.value});
   } finally {
     setModelLoading(false);
   }
@@ -255,21 +254,21 @@ function selectCone(index) {
   const obj = state.lastResult?.objects?.[index];
   if (!obj) {
     els.detailPanel.classList.add('hidden');
-    els.resultSubtitle.textContent = 'コーンを選択してください';
+    els.resultSubtitle.textContent = state.lastResult?.objects?.length ? 'コーンを選択してください' : 'コーンが見つかりませんでした';
     return;
   }
   els.detailPanel.classList.remove('hidden');
-  els.resultSubtitle.textContent = `${index + 1}番目のコーンを選択中`;
+  els.resultSubtitle.textContent = `コーン ${index + 1}を選択`;
+  els.selectedConeTitle.textContent = `コーン ${index + 1}`;
   const pose = obj.pose;
   els.distanceValue.textContent = pose ? formatMeters(pose.distance_m) : '—';
   els.depthValue.textContent = pose ? formatMeters(pose.depth_m) : '—';
-  els.confidenceValue.textContent = confidenceLabel(obj.confidence);
+  els.confidenceValue.textContent = obj.confidence.toFixed(2);
   els.modeValue.textContent = state.lastResult?.pose_mode ?? '—';
   const notes = [];
   if (state.lastResult?.pose_mode !== '校正済み') notes.push('未校正の概算距離です。EXIFまたは手動画角ではレンズ歪みを補正できません。');
-  if (pose && !pose.accepted) notes.push('PnPの品質判定では保留ですが、参考値として表示しています。');
-  if (!pose) notes.push('カメラ設定が不足しているため距離を表示できません。');
-  notes.push(`BBox信頼度 ${(obj.confidence * 100).toFixed(0)}%`);
+  if (Number.isFinite(pose?.distance_m) && !pose.accepted) notes.push('PnPの品質判定では保留ですが、参考値として表示しています。');
+  if (!Number.isFinite(pose?.distance_m)) notes.push('このコーンの距離を推定できませんでした。');
   els.detailNote.textContent = notes.join(' ');
 }
 
@@ -310,23 +309,25 @@ function renderConeList() {
     item.type = 'button';
     item.className = `cone-item ${index === state.selectedIndex ? 'selected' : ''}`;
     const pose = obj.pose;
+    item.setAttribute('aria-pressed', String(index === state.selectedIndex));
+    item.setAttribute('aria-label', `コーン ${index + 1}、${pose ? formatMeters(pose.distance_m) : '距離なし'}`);
     item.innerHTML = `
       <div class="cone-rank">${index + 1}</div>
       <div class="cone-meta">
         <strong>${pose ? formatMeters(pose.distance_m) : '距離なし'}</strong>
-        <small>信頼度 ${(obj.confidence * 100).toFixed(0)}% / BBox ${(obj.bbox_xyxy[2] - obj.bbox_xyxy[0]).toFixed(0)}×${(obj.bbox_xyxy[3] - obj.bbox_xyxy[1]).toFixed(0)} px</small>
       </div>
-      <span class="conf-chip">${confidenceLabel(obj.confidence)}</span>`;
+      <span class="selection-mark" aria-hidden="true">${index === state.selectedIndex ? '✓' : ''}</span>`;
     item.addEventListener('click', () => selectCone(index));
     els.coneList.appendChild(item);
   });
 }
 
 async function runScan() {
-  if (!state.vision) await loadModels();
-  const imageData = await ensureSourceImageData();
+  if (state.scanning || state.modelLoading) return;
   setLoading(true);
   try {
+    if (!state.vision) await loadModels();
+    const imageData = await ensureSourceImageData();
     const points3d = activeGeometry();
     const camera = activeCameraModel(imageData.width, imageData.height);
     state.lastResult = await state.vision.predict(imageData, {
@@ -475,7 +476,11 @@ function bindEvents() {
       alert(`校正JSONを読めません: ${error.message}`);
     }
   });
-  els.useWebGPUInput.addEventListener('change', loadModels);
+  const reloadModels = () => loadModels().catch(error => {
+    alert(`モデルを読み込めません: ${error.message}`);
+  });
+  els.useWebGPUInput.addEventListener('change', reloadModels);
+  els.detectorProfile.addEventListener('change', reloadModels);
   resultCanvas.addEventListener('click', selectConeByCanvasEvent);
   els.saveResultButton.addEventListener('click', saveResultJson);
 }

@@ -1,0 +1,47 @@
+{
+  "input": "images float32 [1,3,320,320], RGB [0,1], bilinear stretch without letterbox; normalization included",
+  "output": "predictions float32 [1,3234,6], cxcywh in 320px, foreground score, constant 1",
+  "postprocess": "score >.01, top300, NMS IoU .5, max100; no minimum box cutoff",
+  "validation": [
+    {
+      "image_id": "T0003",
+      "raw_max_absolute_error": 0.00018310546875,
+      "torchvision_count": 39,
+      "onnx_count": 39,
+      "boxes_max_error": 6.103515625e-05,
+      "scores_max_error": 4.172325134277344e-07
+    },
+    {
+      "image_id": "T0032",
+      "raw_max_absolute_error": 0.0002288818359375,
+      "torchvision_count": 100,
+      "onnx_count": 100,
+      "boxes_max_error": 6.103515625e-05,
+      "scores_max_error": 4.76837158203125e-07
+    },
+    {
+      "image_id": "T0043",
+      "raw_max_absolute_error": 0.000244140625,
+      "torchvision_count": 80,
+      "onnx_count": 80,
+      "boxes_max_error": 7.62939453125e-05,
+      "scores_max_error": 2.384185791015625e-07
+    },
+    {
+      "image_id": "T0050",
+      "raw_max_absolute_error": 0.000152587890625,
+      "torchvision_count": 78,
+      "onnx_count": 78,
+      "boxes_max_error": 9.1552734375e-05,
+      "scores_max_error": 3.8743019104003906e-07
+    },
+    {
+      "image_id": "T0059",
+      "raw_max_absolute_error": 0.000152587890625,
+      "torchvision_count": 82,
+      "onnx_count": 82,
+      "boxes_max_error": 6.103515625e-05,
+      "scores_max_error": 7.748603820800781e-07
+    }
+  ]
+}
