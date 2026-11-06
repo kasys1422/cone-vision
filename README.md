@@ -29,7 +29,7 @@ python -m http.server 8877
 
 ## V12 のモデル
 
-- 設定から軽量なV10 YOLOX-Nano（256px）やSSDLite320-MobileNetV3-Large（320px）も選べます。SSDLiteは実写専用と実写＋合成の2種類を収録しています。
+- 設定から軽量なV10 YOLOX-Nano（256px）やSSDLite320-MobileNetV3-Large（320px）も選べます。設定の「SSDLite」は実写＋合成画像で学習したモデルです。
 - 特徴点モデルは元の写真から192×192のROIを取得し、先端と台座4隅を推定します。各点の周囲を局所CNNで補正します。
 - 保存済みのONNXは次回のスキャンで再利用します。検出スコアの既定値は0.50です。
 - 距離を求めるときはOpenCV.jsのPnPを使います。EXIFや手動画角を使った値は概算です。実測距離と比較した精度は未評価です。
