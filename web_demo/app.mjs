@@ -220,12 +220,30 @@ function confirmModelDownload(files) {
   const mb = bytes => (bytes / 1e6).toFixed(1) + ' MB';
   const lines = files.map(file => file.label + '　' + mb(file.total));
   if (files.length > 1) lines.push('合計　' + mb(files.reduce((sum, file) => sum + file.total, 0)));
-  return window.confirm('モデルをダウンロードしますか？\n\n' + lines.join('\n'));
+  work('モデルのダウンロード', lines.join('\n'));
+  const actions = $('#downloadActions');
+  const spinner = els.dialog.querySelector('.spinner');
+  actions.classList.remove('hidden');
+  spinner.classList.add('hidden');
+  $('#approveDownload').focus();
+  return new Promise(resolve => {
+    const events = new AbortController(), options = {signal: events.signal};
+    function finish(approved) {
+      events.abort();
+      actions.classList.add('hidden');
+      spinner.classList.remove('hidden');
+      resolve(approved);
+    }
+    $('#approveDownload').addEventListener('click', () => finish(true), options);
+    $('#cancelDownload').addEventListener('click', () => finish(false), options);
+    els.dialog.addEventListener('cancel', () => finish(false), options);
+  });
 }
 
 function readWithProgress(models) {
   return readModels(models, confirmModelDownload, (label, stage, received, total) => {
     if (stage === 'saved') work('保存済みモデルを読み込み中', label);
+    else if (stage === 'verify') work('モデルを確認中', label);
     else work('モデルをダウンロード中', label + '　' + mib(received) + ' / ' + mib(total) + ' MiB', received, total);
   });
 }
@@ -712,12 +730,12 @@ function bindEvents() {
   bindRegionSelection();
   for (const select of [$('#depthProfile'), $('#cloudProfile')]) {
     for (const [key, spec] of Object.entries(depthProfiles)) {
-      select.add(new Option(spec.name + '（' + Math.round(spec.size / 1e6) + ' MB）', key));
+      select.add(new Option(spec.name + '（' + Math.round((spec.zipSize ?? spec.size) / 1e6) + ' MB）', key));
     }
   }
   let preferred;
   try { preferred = localStorage.getItem(depthPreferenceKey); } catch {}
-  chooseDepth(Object.hasOwn(depthProfiles, preferred) ? preferred : 'v2_base');
+  chooseDepth(Object.hasOwn(depthProfiles, preferred) ? preferred : 'v3_base');
   $('#depthProfile').addEventListener('change', e => chooseDepth(e.target.value, true));
   $('#openCloud').addEventListener('click', () => showCloud($('#depthProfile').value));
   $('#cloudProfile').addEventListener('change', e => showCloud(e.target.value, true));

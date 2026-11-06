@@ -27,6 +27,7 @@ temp/
 tmp/
 
 # Keep deployable ONNX files in models/ tracked.
+/models/depth/*/*.zip
 # Carefully review checkpoint / source licenses before committing weights.
 
 # OS and editor

@@ -1,4 +1,4 @@
-const CACHE = 'cone-vision-touch-pan-18';
+const CACHE = 'cone-vision-da3-q4-19';
 const ASSETS = [
   './',
   './index.html',
@@ -35,7 +35,7 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET' || new URL(event.request.url).pathname.endsWith('.onnx')) return;
+  if (event.request.method !== 'GET' || /\.(onnx|zip)$/i.test(new URL(event.request.url).pathname)) return;
   event.respondWith(caches.match(event.request).then(hit => hit || fetch(event.request).then(response => {
     const copy = response.clone();
     caches.open(CACHE).then(cache => cache.put(event.request, copy)).catch(() => {});

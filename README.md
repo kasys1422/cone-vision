@@ -24,9 +24,11 @@
 | 深度モデル | ダウンロード容量 | 重みのライセンス |
 |---|---:|---|
 | Depth Anything V2 Small Q4 | 27.4 MB | Apache-2.0 |
-| Depth Anything V2 Base Q4（初期値） | 102.3 MB | CC BY-NC 4.0（非商用） |
 | Depth Anything V3 Small INT8 | 28.9 MB | Apache-2.0 |
-| Depth Anything V3 Base FP16 | 207.2 MB | Apache-2.0 |
+| Depth Anything V3 Base Q4（初期値） | 107.1 MB | Apache-2.0 |
+| Depth Anything V3 Large 1.1 Q4 | 329.9 MB | Apache-2.0 |
+
+V3 BaseとLarge 1.1は公式の重みから単画像の奥行き推定用に変換・量子化しました。初回は「モデルをダウンロード」を押すと、アプリが取得・検証・保存して推論を開始します。[モデルの配布と変換記録](docs/DA3_Q4.md)
 
 「距離画像」を選ぶと、コーンで補正したカメラ前方の奥行きを写真と同じ向きで表示します。近くは黄色、遠くは青色で、凡例の単位はmです。隣の「カラー画像」では深度推定に使った写真を同じ画角・解像度で見比べられます。各タブの切り替えに再推論は不要です。
 
@@ -39,6 +41,7 @@ GitHub Pagesにデプロイすると `https://kasys1422.github.io/cone-vision/` 
 ## ローカル実行
 
 ```bash
+python scripts/fetch_depth_models.py
 python -m http.server 8877
 ```
 

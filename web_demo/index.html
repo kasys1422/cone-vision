@@ -319,6 +319,10 @@
       <div class="work-status"><span class="spinner" aria-hidden="true"></span><h2 id="workTitle"></h2></div>
       <p id="workDetail" role="status"></p>
       <progress id="transferProgress" aria-label="ダウンロード進捗" class="hidden"></progress>
+      <div id="downloadActions" class="hidden">
+        <button id="approveDownload" type="button" class="primary-button">モデルをダウンロード</button>
+        <button id="cancelDownload" type="button" class="ghost-button small">キャンセル</button>
+      </div>
     </dialog>
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.webgpu.min.js"></script>
     <script type="module" src="./app.mjs"></script>
