@@ -206,6 +206,12 @@ export function decodeKeypoints(coordinates, confidence, visibility, roi) {
 }
 
 export const DETECTOR_PROFILES = {
+  fcos_r50: {
+    model: '../models/fcos_r50/cone_detector.onnx',
+    keypoints_model: '../models/tracon_v12/cone_keypoints.onnx',
+    architecture_id: 'fcos_resnet50_fpn', size: 512, keypoint_size: 192,
+    recommended_threshold: .5, target: '交通コーン'
+  },
   v12_default: {
     model: '../models/tracon_v12/yolox_v10.onnx',
     keypoints_model: '../models/tracon_v12/cone_keypoints.onnx',

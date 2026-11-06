@@ -1,4 +1,4 @@
-const CACHE = 'cone-vision-v12';
+const CACHE = 'cone-vision-fcos-r50-1';
 const ASSETS = [
   './',
   './index.html',

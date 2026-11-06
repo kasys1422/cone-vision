@@ -23,6 +23,10 @@ python -m http.server 8877
 
 `http://localhost:8877/` を開きます。カメラは原則HTTPSまたはlocalhostが必要です。初回はONNX Runtime WebをCDNから読み込むためインターネット接続が必要です。
 
+## 単体の大型検出器
+
+「コーンの寸法・カメラ設定」の検出モデルから **FCOS ResNet-50（高解像度・512px）** を選べます。固定実写テストでは正検出55/63個・誤検出3枠でした。PCの単一スレッドWASMで処理時間の中央値は2.14秒です。初回選択時に約62 MiBの検出器を読み込みます。[学習条件と比較結果](models/fcos_r50/MODEL_CARD.md)
+
 ## V12 のモデル
 
 - 標準の検出器はV10 YOLOX-Nano（256px）です。設定から、今回再学習したSSDLite320-MobileNetV3-Large（320px）に切り替えられます。実写専用と実写＋合成の2種類を収録しています。
