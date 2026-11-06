@@ -95,7 +95,7 @@
                 />
               </label>
               <label
-                >水平画角 HFOV [deg]（自動／手動）
+                >水平画角 [°]
                 <input
                   id="fovInput"
                   type="number"
@@ -105,22 +105,6 @@
                   value="60"
                 />
               </label>
-              <p
-                id="fovStatus"
-                class="fov-status"
-                data-status="manual"
-                role="status"
-                aria-live="polite"
-              >
-                写真を選ぶとEXIFから画角を推定します。EXIFがない場合は手動設定です。
-              </p>
-              <button
-                id="useExifFovButton"
-                class="ghost-button small hidden"
-                type="button"
-              >
-                EXIFの画角に戻す
-              </button>
               <label>検出モデル
                 <select id="detectorProfile">
                   <option value="fcos_r50" selected>FCOS ResNet-50（標準・512px）</option>
@@ -212,14 +196,6 @@
           </div>
           <p id="scanHint" class="scan-hint"></p>
           <div class="review-fov">
-            <div
-              id="reviewFovStatus"
-              class="review-fov-status"
-              role="status"
-              aria-live="polite"
-            >
-              画角を確認しています
-            </div>
             <label
               >水平画角
               <input
@@ -230,11 +206,11 @@
                 step="0.01"
                 value="60"
               />
-              °</label
-            >
+              °</label>
+            <button id="useExifFovButton" class="ghost-button small hidden" type="button">写真の画角に戻す</button>
           </div>
           <div class="review-actions">
-            <button id="retakeButton" class="secondary-button">撮り直し</button>
+            <button id="retakeButton" class="secondary-button hidden">撮り直し</button>
             <button id="scanButton" class="primary-button">スキャンする</button>
           </div>
         </section>
@@ -250,7 +226,6 @@
             </button>
             <div>
               <div class="topbar-title">解析結果</div>
-              <small id="inferenceTime"></small>
               <div
                 id="resultSubtitle"
                 class="sr-only"
@@ -293,11 +268,7 @@
                 <div class="metric-item">
                   <span>検出スコア</span><strong id="confidenceValue">—</strong>
                 </div>
-                <div class="metric-item">
-                  <span>測距方式</span><strong id="modeValue">—</strong>
-                </div>
               </div>
-              <p id="detailNote" class="detail-note"></p>
             </section>
           </div>
         </section>

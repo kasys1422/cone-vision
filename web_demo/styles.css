@@ -241,25 +241,6 @@ summary {
   gap: 8px;
   color: var(--text) !important;
 }
-.fov-status {
-  grid-column: 1/-1;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: #f4f0e9;
-  color: #756452;
-  font-size: 13px;
-}
-.fov-status[data-status="ok"] {
-  border-color: #d7dfca;
-  background: #f2f5ec;
-  color: #546641;
-}
-.fov-status[data-status="warning"] {
-  border-color: #f0d2b9;
-  background: #fff4e9;
-  color: #88572f;
-}
 .topbar {
   display: flex;
   align-items: center;
@@ -349,6 +330,9 @@ video {
   gap: 12px;
   margin-top: 16px;
 }
+.review-actions .hidden + .primary-button {
+  grid-column: 1 / -1;
+}
 .review-actions .primary-button {
   min-height: 52px;
 }
@@ -371,14 +355,6 @@ video {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-}
-.review-fov-status {
-  font-size: 13px;
-  color: #88572f;
-  max-width: 420px;
-}
-.review-fov-status[data-status="ok"] {
-  color: #546641;
 }
 .review-fov label {
   white-space: nowrap;
@@ -506,15 +482,6 @@ video {
   line-height: 1.3;
   letter-spacing: -1.5px;
   color: var(--orange-dark);
-}
-.detail-note {
-  color: var(--sub);
-  font-size: 12px;
-  margin-top: 12px;
-  line-height: 1.8;
-}
-.detail-note:empty {
-  display: none;
 }
 @media (min-width: 800px) {
   #resultScreen.active {

@@ -57,8 +57,6 @@ const els = {
   coneHeightInput: $('#coneHeightInput'),
   baseWidthInput: $('#baseWidthInput'),
   fovInput: $('#fovInput'),
-  fovStatus: $('#fovStatus'),
-  reviewFovStatus: $('#reviewFovStatus'),
   reviewFovInput: $('#reviewFovInput'),
   useExifFovButton: $('#useExifFovButton'),
   cameraJsonInput: $('#cameraJsonInput'),
@@ -70,8 +68,6 @@ const els = {
   distanceValue: $('#distanceValue'),
   depthValue: $('#depthValue'),
   confidenceValue: $('#confidenceValue'),
-  modeValue: $('#modeValue'),
-  detailNote: $('#detailNote'),
   selectedConeTitle: $('#selectedConeTitle')
 };
 
@@ -91,7 +87,7 @@ function setBusy(busy) {
   else els.dialog.close();
 }
 
-function work(title, detail, received, total) {
+function work(title, detail = '', received, total) {
   if ($('#workTitle').textContent !== title) $('#workTitle').textContent = title;
   if ($('#workDetail').textContent !== detail) $('#workDetail').textContent = detail;
   const progress = $('#transferProgress');
@@ -156,13 +152,6 @@ function activeCameraModel(width, height) {
   return {K: createApproxK(width, height, hfov), distortion: [], mode: isExif ? 'EXIF概算' : '手動概算'};
 }
 
-function setFovStatus(message, status) {
-  els.fovStatus.textContent = message;
-  els.fovStatus.dataset.status = status;
-  els.reviewFovStatus.textContent = message;
-  els.reviewFovStatus.dataset.status = status;
-}
-
 function applyExifFov(result) {
   const wasExif = state.fovSource === 'exif';
   state.exifFov = result;
@@ -170,14 +159,12 @@ function applyExifFov(result) {
     state.fovSource = 'exif';
     els.fovInput.value = result.fovDeg.toFixed(2);
     els.reviewFovInput.value = els.fovInput.value;
-    setFovStatus(`EXIF自動：${result.message}。レンズ補正等による誤差に注意。`, 'ok');
     els.useExifFovButton.classList.add('hidden');
   } else {
     state.fovSource = 'manual';
     // Never silently reuse the previous photo's EXIF focal length for a different image.
     if (wasExif) els.fovInput.value = '60';
     els.reviewFovInput.value = els.fovInput.value;
-    setFovStatus(result?.message ?? 'カメラ撮影には元ファイルのEXIFがありません。画角を手動設定してください。', 'warning');
     els.useExifFovButton.classList.add('hidden');
   }
 }
@@ -186,7 +173,6 @@ function markManualFov(fromReview = false) {
   if (fromReview) els.fovInput.value = els.reviewFovInput.value;
   else els.reviewFovInput.value = els.fovInput.value;
   state.fovSource = 'manual';
-  setFovStatus('手動設定の画角を使用します。EXIF値がある場合は設定から戻せます。', 'manual');
   els.useExifFovButton.classList.toggle('hidden', state.exifFov?.status !== 'ok');
 }
 
@@ -283,12 +269,6 @@ function selectCone(index) {
   els.distanceValue.textContent = pose ? formatMeters(pose.distance_m) : '—';
   els.depthValue.textContent = pose ? formatMeters(pose.depth_m) : '—';
   els.confidenceValue.textContent = obj.confidence.toFixed(2);
-  els.modeValue.textContent = state.lastResult?.pose_mode ?? '—';
-  const notes = [];
-  if (state.lastResult?.pose_mode !== '校正済み') notes.push('未校正の概算距離です。EXIFまたは手動画角ではレンズ歪みを補正できません。');
-  if (Number.isFinite(pose?.distance_m) && !pose.accepted) notes.push('PnPの品質判定では保留ですが、参考値として表示しています。');
-  if (!Number.isFinite(pose?.distance_m)) notes.push('このコーンの距離を推定できませんでした。');
-  els.detailNote.textContent = notes.join(' ');
 }
 
 
@@ -347,14 +327,7 @@ async function runScan() {
   work('スキャンを準備中', '画像処理エンジンを準備しています。');
   try {
     if (!state.vision) await loadModels();
-    const previous = state.lastResult;
-    let hint = '写真からコーンを検出して距離を計算しています。';
-    if (previous?.detector_profile === els.detectorProfile.value) {
-      hint += '前回の推論は' + (previous.time_ms / 1000).toFixed(1) + '秒でした。';
-    } else if (els.detectorProfile.value === 'fcos_r50') {
-      hint += 'PCでの目安は約2秒です。端末により異なります。';
-    }
-    work('画像を推論中', hint);
+    work('画像を推論中');
     await paint();
     const imageData = await ensureSourceImageData();
     const points3d = activeGeometry();
@@ -369,7 +342,6 @@ async function runScan() {
     });
     state.lastResult.pose_mode = camera.mode;
     state.lastResult.camera_fov = {horizontal_fov_deg: Number(els.fovInput.value), source: state.fovSource, exif_status: state.exifFov?.status ?? 'none'};
-    $('#inferenceTime').textContent = '推論時間 ' + (state.lastResult.time_ms / 1000).toFixed(2) + ' 秒';
     showScreen('result');
     state.selectedIndex = state.lastResult.objects.length ? 0 : null;
     renderResultCanvas();
@@ -383,7 +355,7 @@ async function runScan() {
   }
 }
 
-async function setSourceFromBitmap(bitmap) {
+function setSourceFromBitmap(bitmap, source) {
   if (state.sourceBitmap?.close) {
     try { state.sourceBitmap.close(); } catch {}
   }
@@ -392,6 +364,7 @@ async function setSourceFromBitmap(bitmap) {
   state.lastResult = null;
   state.selectedIndex = null;
   drawBitmapToCanvas(bitmap, reviewCanvas, reviewCtx);
+  els.retakeButton.classList.toggle('hidden', source !== 'camera');
   showScreen('review');
   els.scanButton.disabled = false;
 }
@@ -429,7 +402,7 @@ async function captureFrame() {
   ctx.drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
   const bitmap = await createImageBitmap(cameraCanvas);
   if (sequence !== state.imageSequence) { bitmap.close(); return; }
-  await setSourceFromBitmap(bitmap);
+  setSourceFromBitmap(bitmap, 'camera');
   applyExifFov(null);
 }
 
@@ -439,7 +412,7 @@ async function handleFileInput(file) {
   // Parse the *original* file before the canvas removes the metadata.
   const exif = await readExifFov(file, {width: bitmap.width, height: bitmap.height});
   if (sequence !== state.imageSequence) { bitmap.close(); return; }
-  await setSourceFromBitmap(bitmap);
+  setSourceFromBitmap(bitmap, 'file');
   applyExifFov(exif);
 }
 
