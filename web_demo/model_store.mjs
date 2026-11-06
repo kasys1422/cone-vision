@@ -1,6 +1,7 @@
 /** Sizes of the released ONNX files, used for offline space and transfer progress. */
 const sizes = {
   '../models/fcos_r50/cone_detector.onnx': 64569685,
+  '../models/fcos_r18/cone_detector.onnx': 27592422,
   '../models/tracon_v12/cone_keypoints.onnx': 1471390,
   '../models/tracon_v12/yolox_v10.onnx': 3669893,
   '../models/tracon_v12/cone_detector.onnx': 8921756,

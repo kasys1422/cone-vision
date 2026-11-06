@@ -71,4 +71,8 @@ Source lineage, COCO initialization and learned weights are documented in [V12 p
 
 ## FCOS ResNet-50 FPN
 
-The optional 512px detector is fine-tuned from torchvision FCOS COCO_V1 on the existing TraCon real training split. See the [FCOS model card](models/fcos_r50/MODEL_CARD.md) for weight, architecture and data provenance.
+The default 512px detector is fine-tuned from torchvision FCOS COCO_V1 on the existing TraCon real training split. See the [FCOS model card](models/fcos_r50/MODEL_CARD.md) for weight, architecture and data provenance.
+
+## FCOS ResNet-18 FPN
+
+The selectable 512px detector uses torchvision's ImageNet-pretrained ResNet-18 backbone with a newly initialized FPN and FCOS head. Training used TraCon photographs and synthetic v6 images. The distributed ONNX corresponds to [pattern C, epoch 35](docs/FCOS_R18_THRESHOLD_C.md).
