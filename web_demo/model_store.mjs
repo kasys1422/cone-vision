@@ -1,6 +1,6 @@
 export const depthProfiles = {
-  v3: {name: 'V3 Small INT8', url: 'https://huggingface.co/en970/depth-anything-v3-small-onnx/resolve/4cf0e2d05358b223ce873d1a696b3fb707c83c5d/onnx/model_quantized.onnx', size: 28941058},
-  v2: {name: 'V2 Small Q4', url: 'https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/64fe43eba7f8a384b02fe3fadaa26cbba35548d8/onnx/model_q4.onnx', size: 27404416}
+  v2: {name: 'Depth Anything V2 Small Q4', url: 'https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/64fe43eba7f8a384b02fe3fadaa26cbba35548d8/onnx/model_q4.onnx', size: 27404416},
+  v3: {name: 'Depth Anything V3 Small INT8', url: 'https://huggingface.co/en970/depth-anything-v3-small-onnx/resolve/4cf0e2d05358b223ce873d1a696b3fb707c83c5d/onnx/model_quantized.onnx', size: 28941058}
 };
 
 /** Sizes of the released ONNX files, used for offline space and transfer progress. */

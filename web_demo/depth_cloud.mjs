@@ -96,11 +96,13 @@ export function buildCloud(image, raw, profile, result) {
   // Exclude unsupported far background; keep every anchor inside the depth range.
   const far = Math.max(40, 3*Math.max(...anchors.map(a => a.z)));
   const xyz = new Float32Array(raw.length*3), colors = new Uint8Array(raw.length*3);
+  const metres = new Float32Array(raw.length);
   let count = 0;
   for (let i=0; i<raw.length; i++) {
     if (data[i*4+3] !== 255 || !(raw[i]>0)) continue;
     const z = profile === 'v2' ? scale/raw[i] : scale*raw[i];
     if (!(z>0 && z<=far)) continue;
+    metres[i] = z;
     const u = (i%width+.5)/sx-.5, v = (Math.floor(i/width)+.5)/sy-.5;
     const j = 3*count++;
     xyz[j] = (u-cx)*z/fx;
@@ -109,5 +111,6 @@ export function buildCloud(image, raw, profile, result) {
     colors[j] = data[4*i]; colors[j+1] = data[4*i+1]; colors[j+2] = data[4*i+2];
   }
   if (!count) throw Error('点群に変換できる画素がありません');
-  return {xyz: xyz.subarray(0,3*count), colors: colors.subarray(0,3*count), anchors, scale, far};
+  return {xyz: xyz.subarray(0,3*count), colors: colors.subarray(0,3*count), anchors, scale, far,
+    depthMap: {metres, width, height}};
 }

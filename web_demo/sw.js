@@ -1,4 +1,4 @@
-const CACHE = 'cone-vision-webgpu-10';
+const CACHE = 'cone-vision-depth-map-11';
 const ASSETS = [
   './',
   './index.html',

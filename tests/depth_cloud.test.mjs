@@ -26,6 +26,8 @@ test('both depth conventions use all accepted cone ratios and project pixel cent
     const z=profile==='v3'?10:2.5;
     assert.equal(cloud.scale,profile==='v3'?2.5:10);
     assert.equal(cloud.anchors.length,3);
+    assert.deepEqual([cloud.depthMap.width,cloud.depthMap.height],[13,5]);
+    assert.equal(cloud.depthMap.metres[0],cloud.xyz[1]);
     assert.deepEqual(Array.from(cloud.xyz.slice(0,3)),[-1.2*z,z,.4*z]);
     assert.deepEqual(Array.from(cloud.colors.slice(0,3)),[17,55,93]);
   }
@@ -39,6 +41,8 @@ test('invalid samples, out-of-frame cones and unavailable calibration are handle
     const cloud=buildCloud(image,raw,profile,result);
     assert.equal(cloud.anchors.length,2);
     assert.equal(cloud.xyz.length/3,raw.length-2);
+    assert.deepEqual(Array.from(cloud.depthMap.metres.slice(0,2)),[0,0]);
+    assert.deepEqual(cloud.depthMap.metres.filter(z=>z>0),cloud.xyz.filter((_,i)=>i%3===1));
   }
   raw.fill(0);
   assert.throws(()=>buildCloud(image,raw,'v3',result),/2個/);

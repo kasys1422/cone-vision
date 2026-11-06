@@ -218,9 +218,50 @@ function readWithProgress(path, label) {
   });
 }
 
-function chooseDepth(profile) {
+// Previous versions stored the default on startup. Only remember explicit choices now.
+const depthPreferenceKey = 'cone-depth-model-choice';
+function chooseDepth(profile, remember = false) {
   for (const select of [$('#depthProfile'), $('#cloudProfile')]) select.value = profile;
-  try { localStorage.setItem('cone-depth-profile', profile); } catch {}
+  if (remember) {
+    try { localStorage.setItem(depthPreferenceKey, profile); } catch {}
+  }
+}
+
+function setDepthView(active) {
+  $('#viewDepth').setAttribute('aria-pressed', String(active));
+  $('#viewPoints').setAttribute('aria-pressed', String(!active));
+  $('#depthPanel').classList.toggle('hidden', !active);
+  for (const id of ['#pointPanel', '#gridControl', '#resetCloud']) $(id).classList.toggle('hidden', active);
+}
+
+function renderDepthMap({depthMap: {metres, width, height}, far}) {
+  const canvas = $('#depthCanvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  // Sample the same linear colour scale shown in the legend.
+  const stops = [[0,'#fff099'], [.125,'#f9a247'], [.25,'#c74766'], [.5,'#64439a'], [1,'#233b72']];
+  $('#depthScale').style.backgroundImage = 'linear-gradient(to right, ' +
+    stops.map(([t, color]) => color + ' ' + t*100 + '%').join(', ') + ')';
+  const ramp = document.createElement('canvas');
+  ramp.width = 256; ramp.height = 1;
+  const palette = ramp.getContext('2d');
+  const gradient = palette.createLinearGradient(.5, 0, 255.5, 0);
+  for (const [t, color] of stops) gradient.addColorStop(t, color);
+  palette.fillStyle = gradient;
+  palette.fillRect(0, 0, 256, 1);
+  const colors = palette.getImageData(0, 0, 256, 1).data;
+  const image = ctx.createImageData(width, height);
+  for (let i = 0; i < metres.length; i++) {
+    if (!metres[i]) continue;
+    const k = Math.min(255, Math.round(metres[i]/far*255))*4;
+    image.data[i*4] = colors[k]; image.data[i*4+1] = colors[k+1];
+    image.data[i*4+2] = colors[k+2]; image.data[i*4+3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+  const label = n => n.toLocaleString('ja-JP', {maximumFractionDigits: 1}) + ' m';
+  $('#midDepth').textContent = label(far/2);
+  $('#farDepth').textContent = '遠 · ' + label(far);
 }
 
 function setCloudViewStatus(message = '') {
@@ -230,7 +271,7 @@ function setCloudViewStatus(message = '') {
   $('#resetCloud').disabled = $('#cloudGrid').disabled = Boolean(message);
 }
 
-async function showCloud(profile) {
+async function showCloud(profile, remember = false) {
   if (state.scanning || measuredCones(state.lastResult?.objects ?? []).length < 2) return;
   setBusy(true);
   try {
@@ -246,12 +287,14 @@ async function showCloud(profile) {
     }
     state.viewer?.close();
     state.viewer = null;
+    if (!screens.cloud.classList.contains('active')) setDepthView(false);
+    if (cloud !== state.cloud) renderDepthMap(cloud);
     showScreen('cloud');
     setCloudViewStatus();
     try { state.viewer = openViewer($('#cloudCanvas'), cloud, $('#cloudGrid')); }
     catch { setCloudViewStatus('3D描画を利用できません。LASを保存できます。'); }
     state.cloud = cloud;
-    chooseDepth(profile);
+    chooseDepth(profile, remember);
     $('#cloudInfo').textContent = 'コーン' + cloud.anchors.length + '個で補正 · ' +
       (cloud.xyz.length/3).toLocaleString() + '点';
   } catch (error) {
@@ -606,11 +649,13 @@ function bindEvents() {
     for (const [key, spec] of Object.entries(depthProfiles)) select.add(new Option(spec.name, key));
   }
   let preferred;
-  try { preferred = localStorage.getItem('cone-depth-profile'); } catch {}
-  chooseDepth(Object.hasOwn(depthProfiles, preferred) ? preferred : 'v3');
-  $('#depthProfile').addEventListener('change', e => chooseDepth(e.target.value));
+  try { preferred = localStorage.getItem(depthPreferenceKey); } catch {}
+  chooseDepth(Object.hasOwn(depthProfiles, preferred) ? preferred : 'v2');
+  $('#depthProfile').addEventListener('change', e => chooseDepth(e.target.value, true));
   $('#openCloud').addEventListener('click', () => showCloud($('#depthProfile').value));
-  $('#cloudProfile').addEventListener('change', e => showCloud(e.target.value));
+  $('#cloudProfile').addEventListener('change', e => showCloud(e.target.value, true));
+  $('#viewDepth').addEventListener('click', () => setDepthView(true));
+  $('#viewPoints').addEventListener('click', () => setDepthView(false));
   $('#resetCloud').addEventListener('click', () => state.viewer?.reset());
   $('#cloudCanvas').addEventListener('webglcontextlost', event => {
     event.preventDefault();
