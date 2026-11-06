@@ -394,19 +394,6 @@ video {
 .result-card {
   padding: 0;
 }
-.loading-overlay {
-  position: absolute;
-  inset: auto 16px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  justify-content: center;
-  background: #fffffff5;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 14px 16px;
-  color: var(--text);
-}
 .spinner {
   width: 20px;
   height: 20px;
@@ -614,3 +601,30 @@ video {
   border-radius: 9px;
   padding: 11px;
 }
+.model-storage {
+  margin: 18px 0;
+  padding: 15px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.model-storage p, .scan-hint, #workDetail { color: var(--sub); font-size: .9rem; }
+.model-storage p, #workDetail { margin-top: 5px; }
+.scan-hint { margin: 12px 0; }
+#scanDialog {
+  width: min(90vw, 390px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+  color: var(--text);
+  background: var(--card);
+}
+#scanDialog::backdrop { background: rgb(30 24 20 / 55%); }
+.work-status { display: flex; align-items: center; gap: 12px; }
+.work-status h2 { font-size: 1.15rem; }
+#transferProgress { width: 100%; margin-top: 12px; accent-color: var(--orange); }

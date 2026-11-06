@@ -69,13 +69,17 @@
               <input id="imageInput" type="file" accept="image/*" />
             </label>
           </div>
+          <section class="model-storage" aria-label="モデルデータ">
+            <div><strong>端末のモデルデータ</strong><p id="modelStatus" role="status"></p></div>
+            <button id="deleteModels" class="ghost-button small" type="button" disabled>保存データを削除</button>
+          </section>
           <details class="settings-card">
             <summary>コーンの寸法・カメラ設定</summary>
             <div class="settings-grid">
               <label
                 >コーン高さ [m]
                 <input
-                  id="coneHeightInput"
+                  id="coneHeightInput" value="0.700"
                   type="number"
                   min="0.1"
                   step="0.001"
@@ -84,7 +88,7 @@
               <label
                 >台座幅 [m]
                 <input
-                  id="baseWidthInput"
+                  id="baseWidthInput" value="0.364"
                   type="number"
                   min="0.1"
                   step="0.001"
@@ -119,8 +123,8 @@
               </button>
               <label>検出モデル
                 <select id="detectorProfile">
-                  <option value="v12_default">YOLOX-Nano V10（標準）</option>
-                  <option value="fcos_r50">FCOS ResNet-50（高解像度・512px）</option>
+                  <option value="fcos_r50" selected>FCOS ResNet-50（標準・512px）</option>
+                  <option value="v12_default">YOLOX-Nano V10（軽量・256px）</option>
                   <option value="tracon_v12">SSDLite V12（実写）</option>
                   <option value="v12_mixed">SSDLite V12（実写＋合成）</option>
                 </select>
@@ -206,6 +210,7 @@
           <div class="preview-card">
             <canvas id="reviewCanvas"></canvas>
           </div>
+          <p id="scanHint" class="scan-hint"></p>
           <div class="review-fov">
             <div
               id="reviewFovStatus"
@@ -245,6 +250,7 @@
             </button>
             <div>
               <div class="topbar-title">解析結果</div>
+              <small id="inferenceTime"></small>
               <div
                 id="resultSubtitle"
                 class="sr-only"
@@ -258,10 +264,6 @@
           </div>
           <div class="preview-card result-card">
             <canvas id="resultCanvas"></canvas>
-            <button id="loadingOverlay" class="loading-overlay hidden" disabled>
-              <span class="spinner"></span>
-              <span>スキャン中…</span>
-            </button>
           </div>
           <div class="bottom-sheet">
             <section class="selection-panel">
@@ -302,6 +304,11 @@
       </main>
     </div>
 
+    <dialog id="scanDialog" aria-labelledby="workTitle" aria-describedby="workDetail">
+      <div class="work-status"><span class="spinner" aria-hidden="true"></span><h2 id="workTitle"></h2></div>
+      <p id="workDetail" role="status"></p>
+      <progress id="transferProgress" aria-label="ダウンロード進捗" class="hidden"></progress>
+    </dialog>
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.webgpu.min.js"></script>
     <script type="module" src="./app.mjs"></script>
   </body>

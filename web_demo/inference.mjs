@@ -286,7 +286,7 @@ export class ConeVision {
     this.spec = spec; this.recommendedThreshold = spec.recommended_threshold ?? 0.25;
   }
   static async create(ort, {detectorProfile = 'current', detectorURL = null,
-    keypointsURL = null, preferWebGPU = true} = {}) {
+    keypointsURL = null, detectorBytes = null, keypointBytes = null, preferWebGPU = true} = {}) {
     if (!Object.hasOwn(DETECTOR_PROFILES, detectorProfile)) throw new Error(`Unknown detector profile: ${detectorProfile}`);
     const profile = DETECTOR_PROFILES[detectorProfile];
     detectorURL ??= profile.model;
@@ -306,8 +306,8 @@ export class ConeVision {
     for (const provider of choices) {
       let detector;
       try {
-        detector = await ort.InferenceSession.create(detectorSource, {executionProviders: [provider]});
-        const keypoints = await ort.InferenceSession.create(keypointsURL, {executionProviders: [provider]});
+        detector = await ort.InferenceSession.create(detectorBytes ?? detectorSource, {executionProviders: [provider]});
+        const keypoints = await ort.InferenceSession.create(keypointBytes ?? keypointsURL, {executionProviders: [provider]});
         return new ConeVision(ort, detector, keypoints, provider, spec);
       } catch (err) {
         lastError = err;

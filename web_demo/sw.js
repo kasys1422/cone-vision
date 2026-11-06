@@ -1,15 +1,15 @@
-const CACHE = 'cone-vision-fcos-r50-1';
+const CACHE = 'cone-vision-fcos-default-2';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.mjs',
+  './model_store.mjs',
   './exif_fov.mjs',
   './inference.mjs',
   './pnp.mjs',
   './manifest.webmanifest',
   './packed_loader.mjs',
-  '../models/tracon_v12/yolox_v10.onnx',
   '../.payload/opencv/part-000.txt',
   '../.payload/opencv/part-001.txt',
   '../.payload/opencv/part-002.txt',
@@ -17,9 +17,6 @@ const ASSETS = [
   '../.payload/opencv/part-004.txt',
   './vendor/OpenCV-LICENSE.txt',
   '../assets/cone_geometry.json',
-  '../models/tracon_v12/cone_keypoints.onnx',
-  '../models/tracon_v12/cone_detector.interface.json',
-  '../models/tracon_v12/cone_keypoints.interface.json',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
@@ -34,7 +31,7 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
+  if (event.request.method !== 'GET' || new URL(event.request.url).pathname.endsWith('.onnx')) return;
   event.respondWith(caches.match(event.request).then(hit => hit || fetch(event.request).then(response => {
     const copy = response.clone();
     caches.open(CACHE).then(cache => cache.put(event.request, copy)).catch(() => {});

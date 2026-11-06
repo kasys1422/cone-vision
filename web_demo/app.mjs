@@ -1,6 +1,7 @@
 import {loadPackedScriptURL} from './packed_loader.mjs';
 import {readExifFov} from './exif_fov.mjs';
-import {ConeVision} from './inference.mjs';
+import {deleteModels, mib, modelStorage, readModel} from './model_store.mjs';
+import {ConeVision, DETECTOR_PROFILES} from './inference.mjs';
 import {loadOpenCV, scaleGeometry} from './pnp.mjs';
 
 const $ = sel => document.querySelector(sel);
@@ -31,7 +32,6 @@ const state = {
   facingMode: 'environment',
   installPrompt: null,
   cameraCalibration: null,
-  modelLoading: false,
   scanning: false,
   imageSequence: 0,
   exifFov: null,
@@ -62,7 +62,7 @@ const els = {
   reviewFovInput: $('#reviewFovInput'),
   useExifFovButton: $('#useExifFovButton'),
   cameraJsonInput: $('#cameraJsonInput'),
-  loadingOverlay: $('#loadingOverlay'),
+  dialog: $('#scanDialog'),
   coneList: $('#coneList'),
   objectCountBadge: $('#objectCountBadge'),
   detailPanel: $('#detailPanel'),
@@ -83,21 +83,41 @@ function showScreen(name) {
   if (name !== 'capture') stopCamera();
 }
 
-function setLoading(loading, label = 'スキャン中…') {
-  state.scanning = loading;
-  els.loadingOverlay.classList.toggle('hidden', !loading);
-  els.loadingOverlay.innerHTML = loading ? `<span class="spinner"></span><span>${label}</span>` : '';
-  els.scanButton.textContent = loading ? label : 'スキャンする';
-  els.scanButton.disabled = loading || state.modelLoading || !state.sourceBitmap;
-  els.rescanButton.disabled = loading;
+function setBusy(busy) {
+  state.scanning = busy;
+  els.scanButton.disabled = busy || !state.sourceBitmap;
+  els.rescanButton.disabled = busy;
+  if (busy) els.dialog.showModal();
+  else els.dialog.close();
 }
 
-function setModelLoading(loading) {
-  state.modelLoading = loading;
-  els.detectorProfile.disabled = loading;
-  els.useWebGPUInput.disabled = loading;
-  els.scanButton.disabled = loading || state.scanning || !state.sourceBitmap;
-  if (!state.scanning) els.scanButton.textContent = loading ? 'モデルを準備中…' : 'スキャンする';
+function work(title, detail, received, total) {
+  if ($('#workTitle').textContent !== title) $('#workTitle').textContent = title;
+  if ($('#workDetail').textContent !== detail) $('#workDetail').textContent = detail;
+  const progress = $('#transferProgress');
+  progress.classList.toggle('hidden', !total);
+  if (total) { progress.max = total; progress.value = received; }
+}
+
+// Give the status a paint before the single-threaded WASM call occupies the UI thread.
+const paint = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+async function refreshStorage(prefix = '') {
+  const profile = DETECTOR_PROFILES[els.detectorProfile.value];
+  const info = await modelStorage(profile);
+  if (profile !== DETECTOR_PROFILES[els.detectorProfile.value]) return;
+  const hint = info.missing
+    ? 'スキャン時に必要なモデルをダウンロードします（' + mib(info.missing) + ' MiB）。'
+    : '保存済みのモデルでスキャンできます。';
+  $('#modelStatus').textContent = prefix + (info.available ? '保存済み ' + mib(info.saved) + ' MiB。' : 'このブラウザでは保存できません。') + hint;
+  $('#scanHint').textContent = state.vision ? 'モデル準備完了' : hint;
+  $('#deleteModels').disabled = !(info.saved || state.vision);
+}
+
+async function releaseModels() {
+  const vision = state.vision;
+  state.vision = null;
+  if (vision) await Promise.allSettled([vision.detector.release(), vision.keypoints.release()]);
 }
 
 function formatMeters(value) {
@@ -171,28 +191,27 @@ function markManualFov(fromReview = false) {
 }
 
 async function loadModels() {
-  setModelLoading(true);
-  try {
-    if (!state.geometry) {
-      const response = await fetch('../assets/cone_geometry.json');
-      if (!response.ok) throw new Error('cone_geometry.json を読み込めません');
-      state.geometry = await response.json();
-      els.coneHeightInput.value = state.geometry.height_m.toFixed(3);
-      els.baseWidthInput.value = state.geometry.base_width_m.toFixed(3);
-    }
-    if (!state.cv) {
-      const opencvURL = await loadPackedScriptURL('../.payload/opencv', 5);
-      try { ({cv: state.cv} = await loadOpenCV(opencvURL)); }
-      finally { URL.revokeObjectURL(opencvURL); }
-    }
-    if (state.vision) {
-      await Promise.allSettled([state.vision.detector.release(), state.vision.keypoints.release()]);
-      state.vision = null;
-    }
-    state.vision = await ConeVision.create(ort, {preferWebGPU: els.useWebGPUInput.checked, detectorProfile: els.detectorProfile.value});
-  } finally {
-    setModelLoading(false);
+  if (!state.geometry) {
+    const response = await fetch('../assets/cone_geometry.json');
+    if (!response.ok) throw new Error('cone_geometry.json を読み込めません');
+    state.geometry = await response.json();
   }
+  if (!state.cv) {
+    const opencvURL = await loadPackedScriptURL('../.payload/opencv', 5);
+    try { ({cv: state.cv} = await loadOpenCV(opencvURL)); }
+    finally { URL.revokeObjectURL(opencvURL); }
+  }
+  const profile = DETECTOR_PROFILES[els.detectorProfile.value];
+  const read = (path, label) => readModel(path, (stage, received, total) => {
+    if (stage === 'saved') work('保存済みモデルを読み込み中', label);
+    else work('モデルをダウンロード中', label + '　' + mib(received) + ' / ' + mib(total) + ' MiB', received, total);
+  });
+  const detectorBytes = await read(profile.model, '検出モデル');
+  const keypointBytes = await read(profile.keypoints_model, '特徴点モデル');
+  work('モデルを初期化中', '端末の推論エンジンを準備しています。');
+  await paint();
+  state.vision = await ConeVision.create(ort, {detectorProfile: els.detectorProfile.value,
+    detectorBytes, keypointBytes, preferWebGPU: els.useWebGPUInput.checked});
 }
 
 async function ensureSourceImageData() {
@@ -323,10 +342,20 @@ function renderConeList() {
 }
 
 async function runScan() {
-  if (state.scanning || state.modelLoading) return;
-  setLoading(true);
+  if (state.scanning) return;
+  setBusy(true);
+  work('スキャンを準備中', '画像処理エンジンを準備しています。');
   try {
     if (!state.vision) await loadModels();
+    const previous = state.lastResult;
+    let hint = '写真からコーンを検出して距離を計算しています。';
+    if (previous?.detector_profile === els.detectorProfile.value) {
+      hint += '前回の推論は' + (previous.time_ms / 1000).toFixed(1) + '秒でした。';
+    } else if (els.detectorProfile.value === 'fcos_r50') {
+      hint += 'PCでの目安は約2秒です。端末により異なります。';
+    }
+    work('画像を推論中', hint);
+    await paint();
     const imageData = await ensureSourceImageData();
     const points3d = activeGeometry();
     const camera = activeCameraModel(imageData.width, imageData.height);
@@ -340,6 +369,7 @@ async function runScan() {
     });
     state.lastResult.pose_mode = camera.mode;
     state.lastResult.camera_fov = {horizontal_fov_deg: Number(els.fovInput.value), source: state.fovSource, exif_status: state.exifFov?.status ?? 'none'};
+    $('#inferenceTime').textContent = '推論時間 ' + (state.lastResult.time_ms / 1000).toFixed(2) + ' 秒';
     showScreen('result');
     state.selectedIndex = state.lastResult.objects.length ? 0 : null;
     renderResultCanvas();
@@ -348,7 +378,8 @@ async function runScan() {
   } catch (error) {
     alert(`スキャンに失敗しました: ${error.message}`);
   } finally {
-    setLoading(false);
+    setBusy(false);
+    await refreshStorage();
   }
 }
 
@@ -362,7 +393,7 @@ async function setSourceFromBitmap(bitmap) {
   state.selectedIndex = null;
   drawBitmapToCanvas(bitmap, reviewCanvas, reviewCtx);
   showScreen('review');
-  els.scanButton.disabled = state.modelLoading;
+  els.scanButton.disabled = false;
 }
 
 async function startCamera() {
@@ -476,11 +507,26 @@ function bindEvents() {
       alert(`校正JSONを読めません: ${error.message}`);
     }
   });
-  const reloadModels = () => loadModels().catch(error => {
-    alert(`モデルを読み込めません: ${error.message}`);
+  const changeModel = async () => {
+    await releaseModels();
+    await refreshStorage();
+  };
+  els.useWebGPUInput.addEventListener('change', changeModel);
+  els.detectorProfile.addEventListener('change', changeModel);
+  els.dialog.addEventListener('cancel', event => event.preventDefault());
+  $('#deleteModels').addEventListener('click', async () => {
+    setBusy(true);
+    work('モデルを削除中', '端末に保存した全モデルを削除しています。');
+    try {
+      await releaseModels();
+      await deleteModels();
+      await refreshStorage('削除しました。');
+    } catch (error) {
+      alert('モデルを削除できませんでした：' + error.message);
+    } finally {
+      setBusy(false);
+    }
   });
-  els.useWebGPUInput.addEventListener('change', reloadModels);
-  els.detectorProfile.addEventListener('change', reloadModels);
   resultCanvas.addEventListener('click', selectConeByCanvasEvent);
   els.saveResultButton.addEventListener('click', saveResultJson);
 }
@@ -489,11 +535,7 @@ async function bootstrap() {
   bindEvents();
   setupInstallPrompt();
   registerServiceWorker();
-  try {
-    await loadModels();
-  } catch (error) {
-    alert(`モデルの初期化に失敗しました: ${error.message}`);
-  }
+  await refreshStorage();
 }
 
 bootstrap();
