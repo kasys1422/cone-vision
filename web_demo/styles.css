@@ -370,6 +370,12 @@ video {
 .result-card {
   padding: 0;
 }
+.region-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; }
+.region-tools button { padding: 9px 14px; min-height: 44px; touch-action: manipulation; }
+#regionStatus { color: var(--sub); font-size: .9rem; }
+#regionStatus:empty { display: none; }
+#resultCanvas.selecting-region { touch-action: none; cursor: crosshair; user-select: none; }
+#regionFrame { position: absolute; pointer-events: none; border: 2px dashed white; background: #157cb533; box-shadow: 0 0 0 1px #245064; }
 .spinner {
   width: 20px;
   height: 20px;

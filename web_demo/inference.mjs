@@ -106,6 +106,32 @@ export function nms(detections, threshold = 0.5, maxDetections = 100) {
   return out;
 }
 
+// A second, closer crop can tighten the box substantially. Only use containment
+// for centered boxes, so adjacent cones that touch stay separate.
+export function sameCone(a, b) {
+  if (iou(a, b) >= .5) return true;
+  const width = Math.min(a[2]-a[0], b[2]-b[0]);
+  const height = Math.min(a[3]-a[1], b[3]-b[1]);
+  const overlapWidth = Math.min(a[2], b[2]) - Math.max(a[0], b[0]);
+  const overlapHeight = Math.min(a[3], b[3]) - Math.max(a[1], b[1]);
+  return overlapWidth >= .85*width && overlapHeight >= .85*height &&
+    Math.abs(a[0]+a[2]-b[0]-b[2]) <= width && Math.abs(a[1]+a[3]-b[1]-b[3]) <= height;
+}
+
+function cropPixels(image, [left, top, right, bottom]) {
+  const width = right-left, height = bottom-top;
+  if (![left,top,right,bottom].every(Number.isInteger) || left < 0 || top < 0 ||
+      right > image.width || bottom > image.height || width < 1 || height < 1) {
+    throw new RangeError('Invalid detection region');
+  }
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const start = ((y+top)*image.width + left)*4;
+    data.set(image.data.subarray(start, start+width*4), y*width*4);
+  }
+  return {width, height, data};
+}
+
 export function decodeDetector(heatmap, geometry, transform, threshold = 0.25, nmsIou = 0.5) {
   const h = 64, w = 64, plane = h * w;
   const proposals = [];
@@ -323,12 +349,13 @@ export class ConeVision {
     throw lastError;
   }
   async predict(imageData, {threshold = this.recommendedThreshold, nmsIou = 0.5, points3d = null,
-                           K = null, distortion = [], cv = null, keypointVariant = 'baseline'} = {}) {
+                           K = null, distortion = [], cv = null, keypointVariant = 'baseline', region = null} = {}) {
     if (!['baseline', 'roi_refine'].includes(keypointVariant)) throw new Error(`Unsupported keypoint variant: ${keypointVariant}`);
     const started = performance.now();
     const size = this.spec.input?.shape?.[2] ?? this.spec.size ?? 256;
     const ssd = this.spec.architecture_id === 'ssdlite320_mobilenet_v3_large';
-    const {tensor, transform} = ssd ? ssdInput(imageData, size) : detectorInput(imageData, size, cv);
+    const detectorImage = region ? cropPixels(imageData, region) : imageData;
+    const {tensor, transform} = ssd ? ssdInput(detectorImage, size) : detectorInput(detectorImage, size, cv);
     const feeds = {images: new this.ort.Tensor('float32', tensor, [1, 3, size, size])};
     const raw = this.spec.profile === 'coneslayer' ? await this.detector.run(feeds, ['output']) : await this.detector.run(feeds);
     const decoded = raw.predictions ?? raw.output;
@@ -341,6 +368,11 @@ export class ConeVision {
       return decodeKeypoints(result.coordinates.data, result.confidence.data, result.visibility.data, roi);
     };
     for (const detection of detections) {
+      if (region) {
+        const [x1,y1,x2,y2] = detection.bbox_xyxy;
+        detection.bbox_xyxy = [x1+region[0], y1+region[1], x2+region[0], y2+region[1]];
+        detection.detection_region_xyxy = region.slice();
+      }
       let keypoints = await inferKeypoints(detection.bbox_xyxy);
       if (keypointVariant === 'roi_refine') keypoints = fuseRefinedKeypoints(keypoints, await inferKeypoints(refinementBox(keypoints)));
       else keypoints = {...keypoints, variant: 'baseline', crop_passes: 1};

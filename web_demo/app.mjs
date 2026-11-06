@@ -1,7 +1,7 @@
 import {loadPackedScriptURL} from './packed_loader.mjs';
 import {convertFovSpan, readExifFov} from './exif_fov.mjs';
 import {deleteModels, mib, modelStorage, readModel} from './model_store.mjs';
-import {ConeVision, DETECTOR_PROFILES} from './inference.mjs';
+import {ConeVision, DETECTOR_PROFILES, sameCone} from './inference.mjs';
 import {loadOpenCV, scaleGeometry} from './pnp.mjs';
 
 const $ = sel => document.querySelector(sel);
@@ -28,6 +28,7 @@ const state = {
   sourceImageData: null,
   lastResult: null,
   selectedIndex: null,
+  regionSelection: null,
   cameraStream: null,
   facingMode: 'environment',
   installPrompt: null,
@@ -76,6 +77,7 @@ ort.env.wasm.numThreads = 1;
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
 
 function showScreen(name) {
+  if (name !== 'result') setRegionMode(false);
   Object.entries(screens).forEach(([key, el]) => el.classList.toggle('active', key === name));
   if (name !== 'capture') stopCamera();
 }
@@ -276,7 +278,7 @@ function selectCone(index) {
 
 
 function selectConeByCanvasEvent(event) {
-  if (!state.lastResult?.objects?.length) return;
+  if (state.scanning || state.regionSelection || !state.lastResult?.objects?.length) return;
   const rect = resultCanvas.getBoundingClientRect();
   const x = (event.clientX - rect.left) * (resultCanvas.width / rect.width);
   const y = (event.clientY - rect.top) * (resultCanvas.height / rect.height);
@@ -293,6 +295,71 @@ function selectConeByCanvasEvent(event) {
     }
   });
   if (best >= 0) selectCone(best);
+}
+
+function setRegionMode(active, message = '') {
+  state.regionSelection = active ? {box: null, pointerId: null, start: null} : null;
+  resultCanvas.classList.toggle('selecting-region', active);
+  $('#chooseRegion').classList.toggle('hidden', active);
+  $('#cancelRegion').classList.toggle('hidden', !active);
+  $('#regionStatus').textContent = active ? 'コーンの周囲をドラッグし、離すと再検出します。' : message;
+  drawRegionFrame();
+}
+
+function drawRegionFrame() {
+  const box = state.regionSelection?.box;
+  const frame = $('#regionFrame');
+  frame.classList.toggle('hidden', !box);
+  if (!box) return;
+  const rect = resultCanvas.getBoundingClientRect();
+  const sx = rect.width / resultCanvas.width, sy = rect.height / resultCanvas.height;
+  Object.assign(frame.style, {
+    left: (resultCanvas.offsetLeft + box[0]*sx)+'px', top: (resultCanvas.offsetTop + box[1]*sy)+'px',
+    width: ((box[2]-box[0])*sx)+'px', height: ((box[3]-box[1])*sy)+'px'
+  });
+}
+
+function regionPoint(event) {
+  const rect = resultCanvas.getBoundingClientRect();
+  const pixel = (p, span, size) => Math.round(Math.max(0, Math.min(1, p/span)) * size);
+  return [pixel(event.clientX-rect.left, rect.width, resultCanvas.width),
+          pixel(event.clientY-rect.top, rect.height, resultCanvas.height)];
+}
+
+function bindRegionSelection() {
+  $('#chooseRegion').addEventListener('click', () => setRegionMode(true));
+  $('#cancelRegion').addEventListener('click', () => setRegionMode(false));
+  new ResizeObserver(drawRegionFrame).observe(resultCanvas);
+  resultCanvas.addEventListener('pointerdown', event => {
+    const selection = state.regionSelection;
+    if (!selection || !event.isPrimary || event.button !== 0) return;
+    selection.start = regionPoint(event);
+    selection.pointerId = event.pointerId;
+    selection.box = null;
+    resultCanvas.setPointerCapture(event.pointerId);
+    drawRegionFrame();
+  });
+  const update = event => {
+    const selection = state.regionSelection;
+    if (selection?.pointerId !== event.pointerId) return;
+    const [x,y] = regionPoint(event), [a,b] = selection.start;
+    selection.box = [Math.min(x,a), Math.min(y,b), Math.max(x,a), Math.max(y,b)];
+    if (event.type === 'pointerup') {
+      selection.pointerId = null;
+      const rect = resultCanvas.getBoundingClientRect();
+      if (Math.abs(x-a)*rect.width/resultCanvas.width < 6 || Math.abs(y-b)*rect.height/resultCanvas.height < 6) {
+        selection.box = null;
+      } else {
+        runScan(selection.box);
+      }
+    }
+    drawRegionFrame();
+  };
+  resultCanvas.addEventListener('pointermove', update);
+  resultCanvas.addEventListener('pointerup', update);
+  resultCanvas.addEventListener('lostpointercapture', event => {
+    if (state.regionSelection?.pointerId === event.pointerId) setRegionMode(true);
+  });
 }
 
 function renderConeList() {
@@ -324,7 +391,7 @@ function renderConeList() {
   });
 }
 
-async function runScan() {
+async function runScan(region = null) {
   if (state.scanning) return;
   setBusy(true);
   work('スキャンを準備中', '画像処理エンジンを準備しています。');
@@ -335,7 +402,8 @@ async function runScan() {
     const imageData = await ensureSourceImageData();
     const points3d = activeGeometry();
     const camera = activeCameraModel(imageData.width, imageData.height);
-    state.lastResult = await state.vision.predict(imageData, {
+    const result = await state.vision.predict(imageData, {
+      region,
       threshold: Number(els.thresholdInput.value),
       keypointVariant: els.refineRoiInput.checked ? 'roi_refine' : 'baseline',
       points3d,
@@ -343,13 +411,28 @@ async function runScan() {
       distortion: camera.distortion,
       cv: state.cv
     });
-    state.lastResult.pose_mode = camera.mode;
-    state.lastResult.camera_fov = {horizontal_fov_deg: Number(els.fovInput.value), source: state.fovSource, exif_status: state.exifFov?.status ?? 'none'};
+    if (region) {
+      const objects = state.lastResult.objects;
+      const previousCount = objects.length;
+      let matchedIndex = null;
+      for (const obj of result.objects) {
+        const index = objects.findIndex(old => sameCone(old.bbox_xyxy, obj.bbox_xyxy));
+        if (index < 0) objects.push(obj);
+        else if (matchedIndex === null) matchedIndex = index;
+      }
+      const added = objects.length - previousCount;
+      state.lastResult.time_ms += result.time_ms;
+      setRegionMode(false, added ? `${added}個追加しました。` :
+        result.objects.length ? 'すでに検出済みです。' : 'この範囲にコーンは見つかりませんでした。');
+      selectCone(added ? previousCount : matchedIndex ?? state.selectedIndex);
+      return;
+    }
+    state.lastResult = result;
+    result.pose_mode = camera.mode;
+    result.camera_fov = {horizontal_fov_deg: Number(els.fovInput.value), source: state.fovSource, exif_status: state.exifFov?.status ?? 'none'};
+    setRegionMode(false);
     showScreen('result');
-    state.selectedIndex = state.lastResult.objects.length ? 0 : null;
-    renderResultCanvas();
-    renderConeList();
-    if (state.selectedIndex !== null) selectCone(state.selectedIndex); else selectCone(null);
+    selectCone(result.objects.length ? 0 : null);
   } catch (error) {
     alert(`スキャンに失敗しました: ${error.message}`);
   } finally {
@@ -449,6 +532,7 @@ function saveResultJson() {
 }
 
 function bindEvents() {
+  bindRegionSelection();
   document.querySelectorAll('[data-back]').forEach(btn => btn.addEventListener('click', () => showScreen(btn.dataset.back)));
   els.thresholdInput.addEventListener('input', () => { els.thresholdLabel.value = Number(els.thresholdInput.value).toFixed(2); });
   els.fovInput.addEventListener('input', () => markManualFov(false));
@@ -464,8 +548,8 @@ function bindEvents() {
   });
   els.captureButton.addEventListener('click', captureFrame);
   els.retakeButton.addEventListener('click', startCamera);
-  els.scanButton.addEventListener('click', runScan);
-  els.rescanButton.addEventListener('click', runScan);
+  els.scanButton.addEventListener('click', () => runScan());
+  els.rescanButton.addEventListener('click', () => runScan());
   els.imageInput.addEventListener('change', async event => {
     const file = event.target.files?.[0];
     if (!file) return;

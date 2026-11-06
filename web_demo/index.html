@@ -239,6 +239,12 @@
           </div>
           <div class="preview-card result-card">
             <canvas id="resultCanvas"></canvas>
+            <div id="regionFrame" class="hidden" aria-hidden="true"></div>
+            <div class="region-tools">
+              <button id="chooseRegion" type="button" class="secondary-button">範囲を選んで再検出</button>
+              <button id="cancelRegion" type="button" class="ghost-button hidden">キャンセル</button>
+              <p id="regionStatus" role="status"></p>
+            </div>
           </div>
           <div class="bottom-sheet">
             <section class="selection-panel">
