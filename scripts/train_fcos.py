@@ -1,4 +1,4 @@
-"""Fine-tune one FCOS ResNet-50 FPN detector and export its dense ONNX head."""
+"""Fine-tune an FCOS FPN detector and export its dense ONNX head."""
 import argparse
 import hashlib
 import io
@@ -12,8 +12,11 @@ import numpy as np
 import torch
 from PIL import Image, ImageOps
 from torch import nn
-from torchvision.models.detection import FCOS_ResNet50_FPN_Weights, fcos_resnet50_fpn
-from torchvision.ops import box_iou, nms
+from torchvision.models import ResNet18_Weights, resnet18
+from torchvision.models.detection import FCOS, FCOS_ResNet50_FPN_Weights, fcos_resnet50_fpn
+from torchvision.models.detection.backbone_utils import BackboneWithFPN
+from torchvision.ops import FrozenBatchNorm2d, box_iou, nms
+from torchvision.ops.feature_pyramid_network import LastLevelP6P7
 
 SIZE = 512
 
@@ -40,7 +43,18 @@ def read_split(directory, archive, split):
     return records
 
 
-def build_model():
+def build_model(backbone="resnet50"):
+    if backbone == "resnet18":
+        body = resnet18(weights=ResNet18_Weights.DEFAULT, norm_layer=FrozenBatchNorm2d)
+        for name, parameter in body.named_parameters():
+            parameter.requires_grad_(name.startswith(("layer3.", "layer4.")))
+        pyramid = BackboneWithFPN(
+            body, return_layers={"layer2": "0", "layer3": "1", "layer4": "2"},
+            in_channels_list=[128, 256, 512], out_channels=128,
+            extra_blocks=LastLevelP6P7(512, 128),
+        )
+        return FCOS(pyramid, num_classes=1, min_size=SIZE, max_size=SIZE)
+
     model = fcos_resnet50_fpn(weights=FCOS_ResNet50_FPN_Weights.DEFAULT,
                               min_size=SIZE, max_size=SIZE, trainable_backbone_layers=2)
     head = model.head.classification_head
@@ -138,13 +152,14 @@ def main():
     parser.add_argument("tracon_zip",type=Path)
     parser.add_argument("output",type=Path)
     parser.add_argument("--epochs",type=int,default=10)
+    parser.add_argument("--backbone", choices=("resnet50", "resnet18"), default="resnet50")
     args = parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
     torch.manual_seed(13)
     random.seed(13)
     torch.set_num_threads(4)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = build_model().to(device)
+    model = build_model(args.backbone).to(device)
     optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],lr=.00012)
     with zipfile.ZipFile(args.tracon_zip) as archive:
         train = read_split(args.dataset,archive,"train")
