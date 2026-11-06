@@ -76,3 +76,7 @@ The default 512px detector is fine-tuned from torchvision FCOS COCO_V1 on the ex
 ## FCOS ResNet-18 FPN
 
 The selectable 512px detector uses torchvision's ImageNet-pretrained ResNet-18 backbone with a newly initialized FPN and FCOS head. Training used TraCon photographs and synthetic v6 images. The distributed ONNX corresponds to [pattern C, epoch 35](docs/FCOS_R18_THRESHOLD_C.md).
+
+## Depth Anything Small
+
+The 3D viewer downloads quantized ONNX weights on demand. The pinned distributions are [Depth Anything V3 Small INT8 by en970](https://huggingface.co/en970/depth-anything-v3-small-onnx/tree/4cf0e2d05358b223ce873d1a696b3fb707c83c5d) and [Depth Anything V2 Small Q4 by ONNX Community](https://huggingface.co/onnx-community/depth-anything-v2-small/tree/64fe43eba7f8a384b02fe3fadaa26cbba35548d8). Both Small checkpoints are released under Apache-2.0.

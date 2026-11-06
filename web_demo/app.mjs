@@ -1,6 +1,9 @@
 import {loadPackedScriptURL} from './packed_loader.mjs';
 import {convertFovSpan, readExifFov} from './exif_fov.mjs';
-import {deleteModels, mib, modelStorage, readModel} from './model_store.mjs';
+import {deleteModels, depthProfiles, mib, modelStorage, readModel} from './model_store.mjs';
+import {inferCloud, measuredCones} from './depth_cloud.mjs';
+import {openViewer} from './cloud_view.mjs';
+import {encodeLas} from './las.mjs';
 import {ConeVision, DETECTOR_PROFILES, sameCone} from './inference.mjs';
 import {loadOpenCV, scaleGeometry} from './pnp.mjs';
 
@@ -9,7 +12,8 @@ const screens = {
   home: $('#homeScreen'),
   capture: $('#captureScreen'),
   review: $('#reviewScreen'),
-  result: $('#resultScreen')
+  result: $('#resultScreen'),
+  cloud: $('#cloudScreen')
 };
 const reviewCanvas = $('#reviewCanvas');
 const resultCanvas = $('#resultCanvas');
@@ -27,6 +31,8 @@ const state = {
   sourceBitmap: null,
   sourceImageData: null,
   lastResult: null,
+  cloud: null,
+  viewer: null,
   selectedIndex: null,
   regionSelection: null,
   cameraStream: null,
@@ -77,6 +83,10 @@ ort.env.wasm.numThreads = 1;
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
 
 function showScreen(name) {
+  if (name !== 'cloud') {
+    state.viewer?.close();
+    state.viewer = null;
+  }
   if (name !== 'result') setRegionMode(false);
   Object.entries(screens).forEach(([key, el]) => el.classList.toggle('active', key === name));
   if (name !== 'capture') stopCamera();
@@ -193,16 +203,65 @@ async function loadModels() {
     finally { URL.revokeObjectURL(opencvURL); }
   }
   const profile = DETECTOR_PROFILES[els.detectorProfile.value];
-  const read = (path, label) => readModel(path, (stage, received, total) => {
-    if (stage === 'saved') work('保存済みモデルを読み込み中', label);
-    else work('モデルをダウンロード中', label + '　' + mib(received) + ' / ' + mib(total) + ' MiB', received, total);
-  });
-  const detectorBytes = await read(profile.model, '検出モデル');
-  const keypointBytes = await read(profile.keypoints_model, '特徴点モデル');
+  const detectorBytes = await readWithProgress(profile.model, '検出モデル');
+  const keypointBytes = await readWithProgress(profile.keypoints_model, '特徴点モデル');
   work('モデルを初期化中', '端末の推論エンジンを準備しています。');
   await paint();
   state.vision = await ConeVision.create(ort, {detectorProfile: els.detectorProfile.value,
     detectorBytes, keypointBytes, preferWebGPU: els.useWebGPUInput.checked});
+}
+
+function readWithProgress(path, label) {
+  return readModel(path, (stage, received, total) => {
+    if (stage === 'saved') work('保存済みモデルを読み込み中', label);
+    else work('モデルをダウンロード中', label + '　' + mib(received) + ' / ' + mib(total) + ' MiB', received, total);
+  });
+}
+
+function chooseDepth(profile) {
+  for (const select of [$('#depthProfile'), $('#cloudProfile')]) select.value = profile;
+  try { localStorage.setItem('cone-depth-profile', profile); } catch {}
+}
+
+function setCloudViewStatus(message = '') {
+  $('#cloudCanvas').classList.toggle('hidden', Boolean(message));
+  $('#cloudViewStatus').textContent = message;
+  $('#cloudViewStatus').classList.toggle('hidden', !message);
+  $('#resetCloud').disabled = $('#cloudGrid').disabled = Boolean(message);
+}
+
+async function showCloud(profile) {
+  if (state.scanning || measuredCones(state.lastResult?.objects ?? []).length < 2) return;
+  setBusy(true);
+  try {
+    let cloud = state.cloud;
+    if (cloud?.profile !== profile) {
+      await releaseModels();
+      const spec = depthProfiles[profile];
+      const bytes = await readWithProgress(spec.url, spec.name);
+      work('奥行きを推論中', spec.name);
+      await paint();
+      cloud = await inferCloud(ort, bytes, profile, state.sourceBitmap, state.lastResult, state.cv);
+      cloud.profile = profile;
+    }
+    state.viewer?.close();
+    state.viewer = null;
+    showScreen('cloud');
+    setCloudViewStatus();
+    try { state.viewer = openViewer($('#cloudCanvas'), cloud, $('#cloudGrid')); }
+    catch { setCloudViewStatus('3D描画を利用できません。LASを保存できます。'); }
+    state.cloud = cloud;
+    chooseDepth(profile);
+    $('#cloudInfo').textContent = 'コーン' + cloud.anchors.length + '個で補正 · ' +
+      (cloud.xyz.length/3).toLocaleString() + '点';
+  } catch (error) {
+    if (screens.cloud.classList.contains('active') && state.cloud) chooseDepth(state.cloud.profile);
+    else showScreen('result');
+    alert('3D表示に失敗しました：' + (error.message ?? error));
+  } finally {
+    setBusy(false);
+    await refreshStorage();
+  }
 }
 
 async function ensureSourceImageData() {
@@ -364,6 +423,7 @@ function bindRegionSelection() {
 
 function renderConeList() {
   const objects = state.lastResult?.objects ?? [];
+  $('#openCloud').classList.toggle('hidden', measuredCones(objects).length < 2);
   els.objectCountBadge.textContent = String(objects.length);
   if (!objects.length) {
     els.coneList.className = 'cone-list empty';
@@ -421,12 +481,14 @@ async function runScan(region = null) {
         else if (matchedIndex === null) matchedIndex = index;
       }
       const added = objects.length - previousCount;
+      if (added) state.cloud = null;
       state.lastResult.time_ms += result.time_ms;
       setRegionMode(false, added ? `${added}個追加しました。` :
         result.objects.length ? 'すでに検出済みです。' : 'この範囲にコーンは見つかりませんでした。');
       selectCone(added ? previousCount : matchedIndex ?? state.selectedIndex);
       return;
     }
+    state.cloud = null;
     state.lastResult = result;
     result.pose_mode = camera.mode;
     result.camera_fov = {horizontal_fov_deg: Number(els.fovInput.value), source: state.fovSource, exif_status: state.exifFov?.status ?? 'none'};
@@ -447,6 +509,7 @@ function setSourceFromBitmap(bitmap, source) {
   }
   state.sourceBitmap = bitmap;
   state.sourceImageData = null;
+  state.cloud = null;
   state.lastResult = null;
   state.selectedIndex = null;
   drawBitmapToCanvas(bitmap, reviewCanvas, reviewCtx);
@@ -524,15 +587,43 @@ function setupInstallPrompt() {
 function saveResultJson() {
   if (!state.lastResult) return;
   const blob = new Blob([JSON.stringify(state.lastResult, null, 2)], {type: 'application/json'});
+  downloadFile(blob, 'cone_vision_result.json');
+}
+
+function downloadFile(blob, name) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'cone_vision_result.json';
+  a.download = name;
+  document.body.append(a);
   a.click();
+  a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 function bindEvents() {
   bindRegionSelection();
+  for (const select of [$('#depthProfile'), $('#cloudProfile')]) {
+    for (const [key, spec] of Object.entries(depthProfiles)) select.add(new Option(spec.name, key));
+  }
+  let preferred;
+  try { preferred = localStorage.getItem('cone-depth-profile'); } catch {}
+  chooseDepth(Object.hasOwn(depthProfiles, preferred) ? preferred : 'v3');
+  $('#depthProfile').addEventListener('change', e => chooseDepth(e.target.value));
+  $('#openCloud').addEventListener('click', () => showCloud($('#depthProfile').value));
+  $('#cloudProfile').addEventListener('change', e => showCloud(e.target.value));
+  $('#resetCloud').addEventListener('click', () => state.viewer?.reset());
+  $('#cloudCanvas').addEventListener('webglcontextlost', event => {
+    event.preventDefault();
+    state.viewer?.close();
+    state.viewer = null;
+    setCloudViewStatus('3D描画が中断しました。LASを保存できます。');
+  });
+  $('#saveLas').addEventListener('click', () => {
+    try {
+      const bytes = encodeLas(state.cloud);
+      downloadFile(new Blob([bytes], {type:'application/octet-stream'}), 'cone-vision-' + state.cloud.profile + '.las');
+    } catch (error) { alert('LASを保存できませんでした：' + error.message); }
+  });
   document.querySelectorAll('[data-back]').forEach(btn => btn.addEventListener('click', () => showScreen(btn.dataset.back)));
   els.thresholdInput.addEventListener('input', () => { els.thresholdLabel.value = Number(els.thresholdInput.value).toFixed(2); });
   els.fovInput.addEventListener('input', () => markManualFov(false));
@@ -580,6 +671,7 @@ function bindEvents() {
     try {
       await releaseModels();
       await deleteModels();
+      state.cloud = null;
       await refreshStorage('削除しました。');
     } catch (error) {
       alert('モデルを削除できませんでした：' + error.message);

@@ -1,9 +1,12 @@
-const CACHE = 'cone-vision-fcos-default-8';
+const CACHE = 'cone-vision-cloud-9';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.mjs',
+  './depth_cloud.mjs',
+  './cloud_view.mjs',
+  './las.mjs',
   './model_store.mjs',
   './exif_fov.mjs',
   './inference.mjs',

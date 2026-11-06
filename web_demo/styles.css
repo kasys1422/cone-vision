@@ -601,3 +601,12 @@ video {
 .work-status { display: flex; align-items: center; gap: 12px; }
 .work-status h2 { font-size: 1.15rem; }
 #transferProgress { width: 100%; margin-top: 12px; accent-color: var(--orange); }
+
+#openCloud, .cloud-tools button, .cloud-tools select { border-radius: 10px; }
+.cloud-stage { background: #192026; border-radius: var(--radius); overflow: hidden; }
+#cloudViewStatus { padding: 24px; color: white; }
+#cloudCanvas { width: 100%; height: clamp(240px, 58vh, 650px); touch-action: none; cursor: grab; }
+#cloudCanvas:active { cursor: grabbing; }
+.cloud-tools { display: flex; gap: 10px 18px; flex-wrap: wrap; align-items: center; padding: 14px 0 0; }
+.cloud-tools label { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; }
+.cloud-tools button, .cloud-tools select { padding: 9px 12px; min-height: 44px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
