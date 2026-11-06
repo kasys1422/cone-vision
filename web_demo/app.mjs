@@ -241,7 +241,7 @@ async function showCloud(profile) {
       const bytes = await readWithProgress(spec.url, spec.name);
       work('奥行きを推論中', spec.name);
       await paint();
-      cloud = await inferCloud(ort, bytes, profile, state.sourceBitmap, state.lastResult, state.cv);
+      cloud = await inferCloud(ort, bytes, profile, state.sourceBitmap, state.lastResult, state.cv, els.useWebGPUInput.checked);
       cloud.profile = profile;
     }
     state.viewer?.close();
@@ -662,7 +662,10 @@ function bindEvents() {
     await releaseModels();
     await refreshStorage();
   };
-  els.useWebGPUInput.addEventListener('change', changeModel);
+  els.useWebGPUInput.addEventListener('change', () => {
+    state.cloud = null;
+    return changeModel();
+  });
   els.detectorProfile.addEventListener('change', changeModel);
   els.dialog.addEventListener('cancel', event => event.preventDefault());
   $('#deleteModels').addEventListener('click', async () => {

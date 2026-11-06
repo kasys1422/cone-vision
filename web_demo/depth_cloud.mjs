@@ -1,3 +1,5 @@
+import {createModelSession} from './runtime_session.mjs';
+
 /** PnP uses OpenCV camera axes. The point cloud uses right, forward, up (metres). */
 const local = ([x, y, z]) => [x, z, -y];
 export function median(values) {
@@ -40,7 +42,7 @@ function depthImage(bitmap, result, cv) {
   } finally { mats.forEach(m => m.delete()); }
 }
 
-export async function inferCloud(ort, bytes, profile, bitmap, result, cv) {
+export async function inferCloud(ort, bytes, profile, bitmap, result, cv, preferWebGPU = true) {
   const image = depthImage(bitmap, result, cv);
   const {width, height, data} = image, n = width * height;
   const rgb = new Float32Array(3*n);
@@ -48,7 +50,7 @@ export async function inferCloud(ort, bytes, profile, bitmap, result, cv) {
   for (let c = 0; c < 3; c++) {
     for (let i = 0; i < n; i++) rgb[c*n+i] = (data[4*i+c]/255 - mean[c])/std[c];
   }
-  const session = await ort.InferenceSession.create(bytes, {executionProviders: ['wasm']});
+  const session = await createModelSession(ort, bytes, preferWebGPU);
   const dims = profile === 'v3' ? [1,1,3,height,width] : [1,3,height,width];
   let tensor, output;
   try {

@@ -1,4 +1,4 @@
-const CACHE = 'cone-vision-cloud-9';
+const CACHE = 'cone-vision-webgpu-10';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
   './model_store.mjs',
   './exif_fov.mjs',
   './inference.mjs',
+  './runtime_session.mjs',
   './pnp.mjs',
   './manifest.webmanifest',
   './packed_loader.mjs',

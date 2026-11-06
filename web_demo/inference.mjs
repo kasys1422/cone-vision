@@ -1,4 +1,5 @@
 import {loadPackedBinary} from './packed_loader.mjs';
+import {createModelSession} from './runtime_session.mjs';
 /** GPL-3.0-only. Two independent ONNX sessions; no server inference.
  * Geometry/PnP reference implementation lives in ../geometry/pnp.py.
  * All output pixels refer to the original uploaded image, with no EXIF ambiguity
@@ -314,8 +315,12 @@ export function fuseRefinedKeypoints(first, second) {
 
 export class ConeVision {
   constructor(ort, detector, keypoints, provider, spec = {}) {
-    this.ort = ort; this.detector = detector; this.keypoints = keypoints; this.provider = provider;
+    this.ort = ort; this.detector = detector; this.keypoints = keypoints; this.initialProvider = provider;
     this.spec = spec; this.recommendedThreshold = spec.recommended_threshold ?? 0.25;
+  }
+  get provider() {
+    return this.detector.provider === this.keypoints.provider
+      ? this.detector.provider ?? this.initialProvider : 'mixed';
   }
   static async create(ort, {detectorProfile = 'current', detectorURL = null,
     keypointsURL = null, detectorBytes = null, keypointBytes = null, preferWebGPU = true} = {}) {
@@ -323,7 +328,6 @@ export class ConeVision {
     const profile = DETECTOR_PROFILES[detectorProfile];
     detectorURL ??= profile.model;
     keypointsURL ??= profile.keypoints_model ?? '../models/cone_keypoints.onnx';
-    const choices = preferWebGPU && globalThis.navigator?.gpu ? ['webgpu', 'wasm'] : ['wasm'];
     let spec = {...profile, profile: detectorProfile, keypoints_model: keypointsURL};
     if (['current','real_v3','retrain_v7'].includes(detectorProfile) && typeof detectorURL === 'string') {
       try {
@@ -332,21 +336,16 @@ export class ConeVision {
         if (response.ok) spec = {...spec, ...await response.json()};
       } catch { /* Explicit defaults keep the standalone interface usable. */ }
     }
-    let lastError;
     const detectorSource = detectorProfile === 'retrain_v7'
       ? await loadPackedBinary('../.payload/detector', 5) : detectorURL;
-    for (const provider of choices) {
-      let detector;
-      try {
-        detector = await ort.InferenceSession.create(detectorBytes ?? detectorSource, {executionProviders: [provider]});
-        const keypoints = await ort.InferenceSession.create(keypointBytes ?? keypointsURL, {executionProviders: [provider]});
-        return new ConeVision(ort, detector, keypoints, provider, spec);
-      } catch (err) {
-        lastError = err;
-        if (detector) await detector.release();
-      }
+    const detector = await createModelSession(ort, detectorBytes ?? detectorSource, preferWebGPU);
+    try {
+      const keypoints = await createModelSession(ort, keypointBytes ?? keypointsURL, preferWebGPU);
+      return new ConeVision(ort, detector, keypoints, detector.provider, spec);
+    } catch (error) {
+      await detector.release();
+      throw error;
     }
-    throw lastError;
   }
   async predict(imageData, {threshold = this.recommendedThreshold, nmsIou = 0.5, points3d = null,
                            K = null, distortion = [], cv = null, keypointVariant = 'baseline', region = null} = {}) {
@@ -388,7 +387,8 @@ export class ConeVision {
       detection_threshold: threshold, detector_target: this.spec.target ?? null,
       detector_preprocessing: ssd ? 'Torchvision RGB float bilinear stretch' : cv ? 'OpenCV INTER_LINEAR uint8 RGB' : 'JavaScript bilinear; native OpenCV rounding may differ',
       roi_preprocessing: cv ? 'OpenCV warpAffine float32 affine, INTER_LINEAR, border114' : 'JavaScript fixed-point approximation',
-      provider: this.provider, time_ms: performance.now() - started,
+      provider: this.provider, detector_provider: this.detector.provider ?? this.provider,
+      keypoint_provider: this.keypoints.provider ?? this.provider, time_ms: performance.now() - started,
       notes: ['Corner phase is ambiguous modulo 90 degrees.',
         cv && K && points3d ? 'Metric pose uses OpenCV.js unweighted refinement with explicit C4 ambiguity and conditioning checks.' :
         'PnP-ready points exported; metric pose requires an OpenCV runtime, calibrated K and known physical anchor coordinates.',
