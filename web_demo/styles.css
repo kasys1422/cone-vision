@@ -616,7 +616,10 @@ video {
 .depth-views { display: flex; gap: 4px; margin-bottom: 10px; }
 .depth-views button { border-radius: 10px; min-height: 44px; padding: 8px 16px; color: var(--sub); }
 .depth-views button[aria-pressed="true"] { background: var(--orange-soft); color: var(--orange-dark); font-weight: 650; }
-#depthCanvas { width: auto; height: auto; max-width: 100%; max-height: 58vh; margin: auto; background: #182027; }
+@media (max-width: 400px) {
+  .depth-views button { flex: 1; padding-inline: 4px; }
+}
+#depthCanvas, #colorCanvas { width: auto; height: auto; max-width: 100%; max-height: 58vh; margin: auto; background: #182027; }
 .cloud-tools label:has(#cloudProfile) { flex-wrap: wrap; max-width: 100%; }
 .cloud-tools select { max-width: 100%; }
 .depth-legend { padding: 12px 0 0; font-size: .84rem; }

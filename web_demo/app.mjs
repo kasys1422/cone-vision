@@ -228,11 +228,14 @@ function chooseDepth(profile, remember = false) {
   }
 }
 
-function setDepthView(active) {
-  $('#viewDepth').setAttribute('aria-pressed', String(active));
-  $('#viewPoints').setAttribute('aria-pressed', String(!active));
-  $('#depthPanel').classList.toggle('hidden', !active);
-  for (const id of ['#pointPanel', '#gridControl', '#resetCloud']) $(id).classList.toggle('hidden', active);
+function setDepthView(panelId) {
+  for (const button of document.querySelectorAll('.depth-views button')) {
+    const panel = document.getElementById(button.getAttribute('aria-controls'));
+    const selected = panel.id === panelId;
+    button.setAttribute('aria-pressed', String(selected));
+    panel.classList.toggle('hidden', !selected);
+  }
+  for (const id of ['#gridControl', '#resetCloud']) $(id).classList.toggle('hidden', panelId !== 'pointPanel');
 }
 
 function renderDepthMap({depthMap: {metres, width, height}, far}) {
@@ -288,8 +291,14 @@ async function showCloud(profile, remember = false) {
     }
     state.viewer?.close();
     state.viewer = null;
-    if (!screens.cloud.classList.contains('active')) setDepthView(false);
-    if (cloud !== state.cloud) renderDepthMap(cloud);
+    if (!screens.cloud.classList.contains('active')) setDepthView('pointPanel');
+    if (cloud !== state.cloud) {
+      renderDepthMap(cloud);
+      const canvas = $('#colorCanvas');
+      canvas.width = cloud.colorImage.width;
+      canvas.height = cloud.colorImage.height;
+      canvas.getContext('2d').putImageData(cloud.colorImage, 0, 0);
+    }
     showScreen('cloud');
     setCloudViewStatus();
     try { state.viewer = openViewer($('#cloudCanvas'), cloud, $('#cloudGrid')); }
@@ -682,8 +691,9 @@ function bindEvents() {
   $('#depthProfile').addEventListener('change', e => chooseDepth(e.target.value, true));
   $('#openCloud').addEventListener('click', () => showCloud($('#depthProfile').value));
   $('#cloudProfile').addEventListener('change', e => showCloud(e.target.value, true));
-  $('#viewDepth').addEventListener('click', () => setDepthView(true));
-  $('#viewPoints').addEventListener('click', () => setDepthView(false));
+  for (const button of document.querySelectorAll('.depth-views button')) {
+    button.addEventListener('click', () => setDepthView(button.getAttribute('aria-controls')));
+  }
   $('#resetCloud').addEventListener('click', () => state.viewer?.reset());
   $('#cloudCanvas').addEventListener('webglcontextlost', event => {
     event.preventDefault();

@@ -288,6 +288,7 @@
           <div class="depth-views" role="group" aria-label="表示の切り替え">
             <button id="viewPoints" type="button" aria-controls="pointPanel" aria-pressed="true">カラー点群</button>
             <button id="viewDepth" type="button" aria-controls="depthPanel" aria-pressed="false">距離画像</button>
+            <button id="viewColor" type="button" aria-controls="colorPanel" aria-pressed="false">カラー画像</button>
           </div>
           <div class="cloud-stage" id="pointPanel">
             <canvas id="cloudCanvas" tabindex="0" title="左ドラッグで回転、中ドラッグで水平移動、ホイールで拡大縮小" aria-label="カラー点群。ドラッグで回転、マウス中ボタンドラッグで水平移動、ホイールまたはピンチで拡大縮小。矢印キーとプラス・マイナスキーでも操作できます。"></canvas>
@@ -300,6 +301,9 @@
               <div class="depth-labels"><span>近 · 0 m</span><span id="midDepth"></span><span id="farDepth"></span></div>
               <span class="depth-missing">範囲外・無効</span>
             </div>
+          </div>
+          <div id="colorPanel" class="hidden">
+            <canvas id="colorCanvas" aria-label="深度推定に使ったカラー画像"></canvas>
           </div>
           <div class="cloud-tools">
             <label>深度モデル <select id="cloudProfile"></select></label>

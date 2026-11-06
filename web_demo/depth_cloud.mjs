@@ -112,5 +112,5 @@ export function buildCloud(image, raw, profile, result) {
   }
   if (!count) throw Error('点群に変換できる画素がありません');
   return {xyz: xyz.subarray(0,3*count), colors: colors.subarray(0,3*count), anchors, scale, far,
-    depthMap: {metres, width, height}};
+    depthMap: {metres, width, height}, colorImage: image};
 }
