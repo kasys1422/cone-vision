@@ -1,4 +1,4 @@
-const CACHE = 'cone-vision-color-image-14';
+const CACHE = 'cone-vision-depth-base-15';
 const ASSETS = [
   './',
   './index.html',

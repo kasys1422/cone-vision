@@ -1,4 +1,5 @@
 import {createModelSession} from './runtime_session.mjs';
+import {depthProfiles} from './model_store.mjs';
 
 /** PnP uses OpenCV camera axes. The point cloud uses right, forward, up (metres). */
 const local = ([x, y, z]) => [x, z, -y];
@@ -12,10 +13,10 @@ export function measuredCones(objects) {
   return objects.filter(o => o.pose?.accepted && o.pose.depth_m > 0 && Number.isFinite(o.pose.depth_m));
 }
 
-function depthImage(bitmap, result, cv) {
+function depthImage(bitmap, result, cv, side) {
   const canvas = document.createElement('canvas');
   const longEdge = Math.max(bitmap.width, bitmap.height);
-  const size = span => 14 * Math.max(1, Math.round(37 * span / longEdge));
+  const size = span => 14 * Math.max(1, Math.round(side / 14 * span / longEdge));
   canvas.width = size(bitmap.width);
   canvas.height = size(bitmap.height);
   const ctx = canvas.getContext('2d');
@@ -43,21 +44,44 @@ function depthImage(bitmap, result, cv) {
 }
 
 export async function inferCloud(ort, bytes, profile, bitmap, result, cv, preferWebGPU = true) {
-  const image = depthImage(bitmap, result, cv);
-  const {width, height, data} = image, n = width * height;
+  const spec = depthProfiles[profile];
+  const image = depthImage(bitmap, result, cv, spec.fixedSide ?? 518);
+  const raw = await inferDepthImage(ort, bytes, spec, image, preferWebGPU);
+  return buildCloud(image, raw, spec.family, result);
+}
+
+export async function inferDepthImage(ort, bytes, {family, fixedSide}, image, preferWebGPU) {
+  const {width, height, data} = image;
+  // Single-view fixed-square exports need padding. Keep it outside the depth and RGB maps.
+  const inputW = fixedSide ?? width, inputH = fixedSide ?? height;
+  const left = Math.floor((inputW-width)/2), top = Math.floor((inputH-height)/2);
+  const n = inputW * inputH;
   const rgb = new Float32Array(3*n);
   const mean = [.485, .456, .406], std = [.229, .224, .225];
   for (let c = 0; c < 3; c++) {
-    for (let i = 0; i < n; i++) rgb[c*n+i] = (data[4*i+c]/255 - mean[c])/std[c];
+    for (let y = 0; y < height; y++) {
+      const row = c*n + (y+top)*inputW + left;
+      for (let x = 0; x < width; x++) rgb[row+x] = (data[4*(y*width+x)+c]/255 - mean[c])/std[c];
+    }
   }
   const session = await createModelSession(ort, bytes, preferWebGPU);
-  const dims = profile === 'v3' ? [1,1,3,height,width] : [1,3,height,width];
+  const dims = family === 'v3' && !fixedSide ? [1,1,3,inputH,inputW] : [1,3,inputH,inputW];
+  const inputName = fixedSide ? 'image' : 'pixel_values';
+  const outputName = fixedSide ? 'depth' : 'predicted_depth';
   let tensor, output;
   try {
     tensor = new ort.Tensor('float32', rgb, dims);
-    ({predicted_depth: output} = await session.run({pixel_values: tensor}, ['predicted_depth']));
-    if (output.dims.at(-1) !== width || output.dims.at(-2) !== height) throw Error('深度画像の寸法が一致しません');
-    return buildCloud(image, output.data, profile, result);
+    output = (await session.run({[inputName]: tensor}, [outputName]))[outputName];
+    if (output.dims.at(-1) !== inputW || output.dims.at(-2) !== inputH) throw Error('深度画像の寸法が一致しません');
+    let depth = output.data;
+    if (width !== inputW || height !== inputH) {
+      depth = new Float32Array(width*height);
+      for (let y = 0; y < height; y++) {
+        const start = (top+y)*inputW + left;
+        depth.set(output.data.subarray(start,start+width), y*width);
+      }
+    }
+    return depth;
   } finally {
     output?.dispose();
     tensor?.dispose();
@@ -65,7 +89,7 @@ export async function inferCloud(ort, bytes, profile, bitmap, result, cv, prefer
   }
 }
 
-export function buildCloud(image, raw, profile, result) {
+export function buildCloud(image, raw, family, result) {
   const {width, height, data} = image;
   const [w,h] = result.image_size;
   const sx = width/w, sy = height/h;
@@ -89,7 +113,7 @@ export function buildCloud(image, raw, profile, result) {
     }
     if (!patch.length) continue;
     const d = median(patch);
-    anchors.push({base: local(t), up: local(up), z, ratio: profile === 'v2' ? z*d : z/d});
+    anchors.push({base: local(t), up: local(up), z, ratio: family === 'v2' ? z*d : z/d});
   }
   if (anchors.length < 2) throw Error('深度と対応するコーンが2個必要です');
   const scale = median(anchors.map(a => a.ratio));
@@ -100,7 +124,7 @@ export function buildCloud(image, raw, profile, result) {
   let count = 0;
   for (let i=0; i<raw.length; i++) {
     if (data[i*4+3] !== 255 || !(raw[i]>0)) continue;
-    const z = profile === 'v2' ? scale/raw[i] : scale*raw[i];
+    const z = family === 'v2' ? scale/raw[i] : scale*raw[i];
     if (!(z>0 && z<=far)) continue;
     metres[i] = z;
     const u = (i%width+.5)/sx-.5, v = (Math.floor(i/width)+.5)/sy-.5;

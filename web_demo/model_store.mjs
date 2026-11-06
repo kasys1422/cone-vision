@@ -1,6 +1,8 @@
 export const depthProfiles = {
-  v2: {name: 'Depth Anything V2 Small Q4', url: 'https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/64fe43eba7f8a384b02fe3fadaa26cbba35548d8/onnx/model_q4.onnx', size: 27404416},
-  v3: {name: 'Depth Anything V3 Small INT8', url: 'https://huggingface.co/en970/depth-anything-v3-small-onnx/resolve/4cf0e2d05358b223ce873d1a696b3fb707c83c5d/onnx/model_quantized.onnx', size: 28941058}
+  v2: {family: 'v2', name: 'Depth Anything V2 Small Q4', url: 'https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/64fe43eba7f8a384b02fe3fadaa26cbba35548d8/onnx/model_q4.onnx', size: 27404416},
+  v2_base: {family: 'v2', name: 'Depth Anything V2 Base Q4', url: 'https://huggingface.co/onnx-community/depth-anything-v2-base/resolve/dd4557d492cd7b563738ac8d9ccff9094620983c/onnx/model_q4.onnx', size: 102269714},
+  v3: {family: 'v3', name: 'Depth Anything V3 Small INT8', url: 'https://huggingface.co/en970/depth-anything-v3-small-onnx/resolve/4cf0e2d05358b223ce873d1a696b3fb707c83c5d/onnx/model_quantized.onnx', size: 28941058},
+  v3_base: {family: 'v3', fixedSide: 504, name: 'Depth Anything V3 Base FP16', url: 'https://huggingface.co/Heliosoph/da3-base-onnx/resolve/72080d285b91493e7e2f2f197d5e3afdf72ddb95/model_fp16.onnx', size: 207235996}
 };
 
 /** Sizes of the released ONNX files, used for offline space and transfer progress. */

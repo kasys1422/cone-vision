@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {buildCloud, measuredCones} from '../web_demo/depth_cloud.mjs';
+import {buildCloud, inferDepthImage, measuredCones} from '../web_demo/depth_cloud.mjs';
 import {encodeLas} from '../web_demo/las.mjs';
 
 function fixture() {
@@ -16,6 +16,29 @@ function fixture() {
   const result={image_size:[26,10],K:[[10,0,12.5],[0,10,4.5],[0,0,1]],objects};
   return {image:{width,height,data},raw,result};
 }
+
+test('a fixed-square depth session centres portrait and landscape images and removes padding from the output',async ()=>{
+  for (const [width,height] of [[4,2],[2,4]]) {
+    const data = new Uint8ClampedArray(width*height*4).fill(255);
+    const pixels = Float32Array.from({length:16}, (_,i) => i+1);
+    const content = width===4 ? [5,6,7,8,9,10,11,12] : [2,3,6,7,10,11,14,15];
+    const session = {
+      async run({image}, fetches) {
+        assert.deepEqual(image.dims,[1,3,4,4]);
+        assert.deepEqual(fetches,['depth']);
+        for (let i=0; i<16; i++) assert.equal(image.data[i] > 0, content.includes(i+1));
+        return {depth:{data:pixels,dims:[1,1,4,4],dispose(){}}};
+      },
+      async release(){}
+    };
+    const ort = {InferenceSession:{create:async()=>session},Tensor:class {
+      constructor(type,data,dims) { this.data=data; this.dims=dims; }
+      dispose(){}
+    }};
+    const result = await inferDepthImage(ort,new Uint8Array(),{family:'v3',fixedSide:4},{width,height,data},false);
+    assert.deepEqual(Array.from(result), content);
+  }
+});
 
 test('both depth conventions use all accepted cone ratios and project pixel centres in camera-local metres',()=>{
   const {image,raw,result}=fixture();

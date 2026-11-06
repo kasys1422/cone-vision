@@ -683,7 +683,9 @@ function downloadFile(blob, name) {
 function bindEvents() {
   bindRegionSelection();
   for (const select of [$('#depthProfile'), $('#cloudProfile')]) {
-    for (const [key, spec] of Object.entries(depthProfiles)) select.add(new Option(spec.name, key));
+    for (const [key, spec] of Object.entries(depthProfiles)) {
+      select.add(new Option(spec.name + '（' + Math.round(spec.size / 1e6) + ' MB）', key));
+    }
   }
   let preferred;
   try { preferred = localStorage.getItem(depthPreferenceKey); } catch {}
