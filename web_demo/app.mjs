@@ -1,6 +1,6 @@
 import {loadPackedScriptURL} from './packed_loader.mjs';
 import {convertFovSpan, readExifFov} from './exif_fov.mjs';
-import {deleteModels, depthProfiles, mib, modelStorage, readModel} from './model_store.mjs';
+import {deleteModels, depthProfiles, mib, modelStorage, readModels} from './model_store.mjs';
 import {inferCloud, measuredCones} from './depth_cloud.mjs';
 import {openViewer} from './cloud_view.mjs';
 import {encodeLas} from './las.mjs';
@@ -193,6 +193,15 @@ function markManualFov(fromReview = false) {
 }
 
 async function loadModels() {
+  const profile = DETECTOR_PROFILES[els.detectorProfile.value];
+  const buffers = await readWithProgress([
+    {path: profile.model, label: els.detectorProfile.selectedOptions[0].textContent},
+    {path: profile.keypoints_model, label: '特徴点モデル'}
+  ]);
+  if (!buffers) return;
+  const [detectorBytes, keypointBytes] = buffers;
+  work('モデルを初期化中', '端末の推論エンジンを準備しています。');
+  await paint();
   if (!state.geometry) {
     const response = await fetch('../assets/cone_geometry.json');
     if (!response.ok) throw new Error('cone_geometry.json を読み込めません');
@@ -203,17 +212,19 @@ async function loadModels() {
     try { ({cv: state.cv} = await loadOpenCV(opencvURL)); }
     finally { URL.revokeObjectURL(opencvURL); }
   }
-  const profile = DETECTOR_PROFILES[els.detectorProfile.value];
-  const detectorBytes = await readWithProgress(profile.model, '検出モデル');
-  const keypointBytes = await readWithProgress(profile.keypoints_model, '特徴点モデル');
-  work('モデルを初期化中', '端末の推論エンジンを準備しています。');
-  await paint();
   state.vision = await ConeVision.create(ort, {detectorProfile: els.detectorProfile.value,
     detectorBytes, keypointBytes, preferWebGPU: els.useWebGPUInput.checked});
 }
 
-function readWithProgress(path, label) {
-  return readModel(path, (stage, received, total) => {
+function confirmModelDownload(files) {
+  const mb = bytes => (bytes / 1e6).toFixed(1) + ' MB';
+  const lines = files.map(file => file.label + '　' + mb(file.total));
+  if (files.length > 1) lines.push('合計　' + mb(files.reduce((sum, file) => sum + file.total, 0)));
+  return window.confirm('モデルをダウンロードしますか？\n\n' + lines.join('\n'));
+}
+
+function readWithProgress(models) {
+  return readModels(models, confirmModelDownload, (label, stage, received, total) => {
     if (stage === 'saved') work('保存済みモデルを読み込み中', label);
     else work('モデルをダウンロード中', label + '　' + mib(received) + ' / ' + mib(total) + ' MiB', received, total);
   });
@@ -281,9 +292,14 @@ async function showCloud(profile, remember = false) {
   try {
     let cloud = state.cloud;
     if (cloud?.profile !== profile) {
-      await releaseModels();
       const spec = depthProfiles[profile];
-      const bytes = await readWithProgress(spec.url, spec.name);
+      const buffers = await readWithProgress([{path: spec.url, label: spec.name}]);
+      if (!buffers) {
+        if (screens.cloud.classList.contains('active') && cloud) chooseDepth(cloud.profile);
+        return;
+      }
+      const [bytes] = buffers;
+      await releaseModels();
       work('奥行きを推論中', spec.name);
       await paint();
       cloud = await inferCloud(ort, bytes, profile, state.sourceBitmap, state.lastResult, state.cv, els.useWebGPUInput.checked);
@@ -533,6 +549,7 @@ async function runScan(region = null) {
   work('スキャンを準備中', '画像処理エンジンを準備しています。');
   try {
     if (!state.vision) await loadModels();
+    if (!state.vision) return;
     work('画像を推論中');
     await paint();
     const imageData = await ensureSourceImageData();
@@ -689,7 +706,7 @@ function bindEvents() {
   }
   let preferred;
   try { preferred = localStorage.getItem(depthPreferenceKey); } catch {}
-  chooseDepth(Object.hasOwn(depthProfiles, preferred) ? preferred : 'v2');
+  chooseDepth(Object.hasOwn(depthProfiles, preferred) ? preferred : 'v2_base');
   $('#depthProfile').addEventListener('change', e => chooseDepth(e.target.value, true));
   $('#openCloud').addEventListener('click', () => showCloud($('#depthProfile').value));
   $('#cloudProfile').addEventListener('change', e => showCloud(e.target.value, true));

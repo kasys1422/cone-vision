@@ -1,4 +1,4 @@
-const CACHE = 'cone-vision-depth-base-15';
+const CACHE = 'cone-vision-download-confirm-16';
 const ASSETS = [
   './',
   './index.html',

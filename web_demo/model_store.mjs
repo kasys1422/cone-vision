@@ -40,15 +40,26 @@ export async function deleteModels() {
   await globalThis.caches?.delete(cacheName);
 }
 
-export async function readModel(path, progress) {
-  const url = new URL(path, import.meta.url).href;
+export async function readModels(models, confirmDownload, progress) {
   const store = await openStore();
-  const saved = await store?.match(url);
+  const files = await Promise.all(models.map(async ({path, label}) => {
+    const url = new URL(path, import.meta.url).href;
+    return {url, label, total: sizes[path], saved: await store?.match(url)};
+  }));
+  const missing = files.filter(file => !file.saved);
+  if (missing.length && !await confirmDownload(missing)) return null;
+  const buffers = [];
+  for (const file of files) {
+    buffers.push(await readFile(file, store, (...args) => progress(file.label, ...args)));
+  }
+  return buffers;
+}
+
+async function readFile({url, total, saved}, store, progress) {
   if (saved) {
-    progress('saved', 0, sizes[path]);
+    progress('saved', 0, total);
     return new Uint8Array(await saved.arrayBuffer());
   }
-  const total = sizes[path];
   progress('download', 0, total);
   const res = await fetch(url, {cache: 'no-store'});
   if (!res.ok) throw new Error('モデルを取得できません（HTTP ' + res.status + '）');
