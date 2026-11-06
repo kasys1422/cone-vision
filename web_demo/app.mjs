@@ -4,7 +4,7 @@ import {deleteModels, depthProfiles, mib, modelStorage, readModels} from './mode
 import {inferCloud, measuredCones} from './depth_cloud.mjs';
 import {openViewer} from './cloud_view.mjs';
 import {encodeLas} from './las.mjs';
-import {ConeVision, DETECTOR_PROFILES, sameCone} from './inference.mjs';
+import {ConeVision, DETECTOR_PROFILES, iou, sameCone} from './inference.mjs';
 import {loadOpenCV, scaleGeometry} from './pnp.mjs';
 
 const $ = sel => document.querySelector(sel);
@@ -569,17 +569,28 @@ async function runScan(region = null) {
       const previousCount = objects.length;
       let matchedIndex = null;
       for (const obj of result.objects) {
-        if (state.removedCones.some(({object}) => sameCone(object.bbox_xyxy, obj.bbox_xyxy))) continue;
         const index = objects.findIndex(old => sameCone(old.bbox_xyxy, obj.bbox_xyxy));
-        if (index < 0) objects.push(obj);
-        else if (matchedIndex === null) matchedIndex = index;
+        if (index >= 0) {
+          if (matchedIndex === null) matchedIndex = index;
+          continue;
+        }
+        objects.push(obj);
+        // Retire only the closest matching deletion; other cones can still be restored.
+        let restored = -1;
+        let bestOverlap = 0;
+        state.removedCones.forEach(({object}, i) => {
+          const box = object.bbox_xyxy;
+          if (!sameCone(box, obj.bbox_xyxy)) return;
+          const overlap = iou(box, obj.bbox_xyxy);
+          if (overlap > bestOverlap) { bestOverlap = overlap; restored = i; }
+        });
+        if (restored >= 0) state.removedCones.splice(restored, 1);
       }
       const added = objects.length - previousCount;
       if (added) state.cloud = null;
       state.lastResult.time_ms += result.time_ms;
       setRegionMode(false, added ? `${added}個追加しました。` :
-        matchedIndex !== null ? 'すでに検出済みです。' :
-        result.objects.length ? '削除済みのコーンです。' : 'この範囲にコーンは見つかりませんでした。');
+        matchedIndex !== null ? 'すでに検出済みです。' : 'この範囲にコーンは見つかりませんでした。');
       selectCone(added ? previousCount : matchedIndex ?? state.selectedIndex);
       return;
     }

@@ -1,4 +1,4 @@
-const CACHE = 'cone-vision-download-confirm-16';
+const CACHE = 'cone-vision-region-restore-17';
 const ASSETS = [
   './',
   './index.html',
