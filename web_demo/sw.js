@@ -1,4 +1,4 @@
-const CACHE = 'cone-vision-region-restore-17';
+const CACHE = 'cone-vision-touch-pan-18';
 const ASSETS = [
   './',
   './index.html',

@@ -99,8 +99,8 @@ export function openViewer(canvas, cloud, gridInput) {
     }
     function redraw() { if (!frame) frame=requestAnimationFrame(draw); }
     function reset() { yaw=.13; pitch=.16; radius=distance; target=[...center]; redraw(); }
-    function zoom(factor) { radius=clamp(radius*factor,.2,Math.max(100,distance*12)); redraw(); }
-    function pan(dx,dy) {
+    function zoom(factor, startRadius=radius) { radius=clamp(startRadius*factor,.2,Math.max(100,distance*12)); redraw(); }
+    function pan(dx,dy, startTarget=target, startRadius=radius) {
       const right=[Math.cos(yaw),-Math.sin(yaw),0];
       const heading=[Math.sin(yaw),Math.cos(yaw),0];
       const normal=grid.normal;
@@ -109,37 +109,48 @@ export function openViewer(canvas, cloud, gridInput) {
       const along=Math.hypot(...projected)>1e-5 ? unit(projected) : unit(cross(heading,normal));
       const across=cross(normal,along);
       const sign=dot(across,heading)<0 ? -1 : 1;
-      const metresPerPixel=2*radius/(1.8*Math.max(1,canvas.clientHeight));
-      target=target.map((v,i)=>v+metresPerPixel*(-dx*along[i]+dy*sign*across[i]));
+      const metresPerPixel=2*startRadius/(1.8*Math.max(1,canvas.clientHeight));
+      target=startTarget.map((v,i)=>v+metresPerPixel*(-dx*along[i]+dy*sign*across[i]));
       redraw();
     }
     const fingers=new Map();
-    function separation() {
+    let gesture=null;
+    function touchPair() {
       const [a,b]=fingers.values();
-      return Math.max(1,Math.hypot(a[0]-b[0],a[1]-b[1]));
+      return {x:(a[0]+b[0])/2, y:(a[1]+b[1])/2, span:Math.max(1,Math.hypot(a[0]-b[0],a[1]-b[1]))};
+    }
+    function rebaseGesture() {
+      gesture=fingers.size===2 ? {...touchPair(), target, radius} : null;
     }
     canvas.addEventListener('pointerdown',e=>{
       if (e.pointerType==='mouse' && e.button===1) e.preventDefault();
       else if (e.button!==0) return;
       canvas.setPointerCapture(e.pointerId); fingers.set(e.pointerId,[e.clientX,e.clientY]);
+      rebaseGesture();
     },options);
     canvas.addEventListener('pointermove',e=>{
       const old=fingers.get(e.pointerId);
       if (!old) return;
-      const before=fingers.size===2 ? separation() : null;
       fingers.set(e.pointerId,[e.clientX,e.clientY]);
       if (e.pointerType==='mouse' && (e.buttons & 4)) {
         pan(e.clientX-old[0],e.clientY-old[1]);
         return;
       }
       if (e.pointerType==='mouse' && !(e.buttons & 1)) return;
-      if (before!==null) zoom(before/separation());
+      if (gesture) {
+        const pair=touchPair();
+        // Both transforms use the same starting pose, regardless of pointer event order.
+        pan(pair.x-gesture.x,pair.y-gesture.y,gesture.target,gesture.radius);
+        zoom(gesture.span/pair.span,gesture.radius);
+      }
       if (fingers.size===1) {
         yaw+=(e.clientX-old[0])*.008; pitch=clamp(pitch+(e.clientY-old[1])*.008,-1.48,1.48); redraw();
       }
     },options);
     for (const name of ['pointerup','pointercancel','lostpointercapture']) {
-      canvas.addEventListener(name,e=>fingers.delete(e.pointerId),options);
+      canvas.addEventListener(name,e=>{
+        if (fingers.delete(e.pointerId)) rebaseGesture();
+      },options);
     }
     canvas.addEventListener('auxclick',e=>{ if (e.button===1) e.preventDefault(); },options);
     canvas.addEventListener('wheel',e=>{
