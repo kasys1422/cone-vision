@@ -1,4 +1,4 @@
-const CACHE = 'cone-vision-depth-map-11';
+const CACHE = 'cone-vision-pan-12';
 const ASSETS = [
   './',
   './index.html',

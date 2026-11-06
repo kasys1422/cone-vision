@@ -21,7 +21,7 @@ function makeGrid(anchors, center, extent) {
     vertex(k,-extent,major); vertex(k,extent,major);
     vertex(-extent,k,major); vertex(extent,k,major);
   }
-  return {xyz:new Float32Array(xyz), colors:new Uint8Array(colors)};
+  return {xyz:new Float32Array(xyz), colors:new Uint8Array(colors), normal};
 }
 
 // Camera basis and perspective are evaluated on the GPU; redraw only after a gesture or resize.
@@ -72,7 +72,7 @@ export function openViewer(canvas, cloud, gridInput) {
     const pos=gl.getAttribLocation(program,'pos'), rgb=gl.getAttribLocation(program,'rgb');
     const loc=Object.fromEntries(['target','right','up','front','radius','aspect','size','clipFar']
       .map(key=>[key,gl.getUniformLocation(program,key)]));
-    let yaw, pitch, radius;
+    let yaw, pitch, radius, target;
     function draw() {
       frame=0;
       const dpr=Math.min(window.devicePixelRatio||1,2);
@@ -82,7 +82,7 @@ export function openViewer(canvas, cloud, gridInput) {
       gl.enable(gl.DEPTH_TEST); gl.useProgram(program);
       const front=[Math.sin(yaw)*Math.cos(pitch), Math.cos(yaw)*Math.cos(pitch), -Math.sin(pitch)];
       const right=[Math.cos(yaw),-Math.sin(yaw),0];
-      gl.uniform3fv(loc.target,center); gl.uniform3fv(loc.front,front);
+      gl.uniform3fv(loc.target,target); gl.uniform3fv(loc.front,front);
       gl.uniform3fv(loc.right,right); gl.uniform3fv(loc.up,cross(right,front));
       gl.uniform1f(loc.radius,radius); gl.uniform1f(loc.aspect,w/h);
       gl.uniform1f(loc.clipFar,radius+cloud.far*8+100);
@@ -98,15 +98,29 @@ export function openViewer(canvas, cloud, gridInput) {
       if (gridInput.checked) plot(lines,gl.LINES);
     }
     function redraw() { if (!frame) frame=requestAnimationFrame(draw); }
-    function reset() { yaw=.13; pitch=.16; radius=distance; redraw(); }
+    function reset() { yaw=.13; pitch=.16; radius=distance; target=[...center]; redraw(); }
     function zoom(factor) { radius=clamp(radius*factor,.2,Math.max(100,distance*12)); redraw(); }
+    function pan(dx,dy) {
+      const right=[Math.cos(yaw),-Math.sin(yaw),0];
+      const heading=[Math.sin(yaw),Math.cos(yaw),0];
+      const normal=grid.normal;
+      const perpendicular=dot(right,normal);
+      const projected=right.map((v,i)=>v-perpendicular*normal[i]);
+      const along=Math.hypot(...projected)>1e-5 ? unit(projected) : unit(cross(heading,normal));
+      const across=cross(normal,along);
+      const sign=dot(across,heading)<0 ? -1 : 1;
+      const metresPerPixel=2*radius/(1.8*Math.max(1,canvas.clientHeight));
+      target=target.map((v,i)=>v+metresPerPixel*(-dx*along[i]+dy*sign*across[i]));
+      redraw();
+    }
     const fingers=new Map();
     function separation() {
       const [a,b]=fingers.values();
       return Math.max(1,Math.hypot(a[0]-b[0],a[1]-b[1]));
     }
     canvas.addEventListener('pointerdown',e=>{
-      if (e.button!==0) return;
+      if (e.pointerType==='mouse' && e.button===1) e.preventDefault();
+      else if (e.button!==0) return;
       canvas.setPointerCapture(e.pointerId); fingers.set(e.pointerId,[e.clientX,e.clientY]);
     },options);
     canvas.addEventListener('pointermove',e=>{
@@ -114,6 +128,11 @@ export function openViewer(canvas, cloud, gridInput) {
       if (!old) return;
       const before=fingers.size===2 ? separation() : null;
       fingers.set(e.pointerId,[e.clientX,e.clientY]);
+      if (e.pointerType==='mouse' && (e.buttons & 4)) {
+        pan(e.clientX-old[0],e.clientY-old[1]);
+        return;
+      }
+      if (e.pointerType==='mouse' && !(e.buttons & 1)) return;
       if (before!==null) zoom(before/separation());
       if (fingers.size===1) {
         yaw+=(e.clientX-old[0])*.008; pitch=clamp(pitch+(e.clientY-old[1])*.008,-1.48,1.48); redraw();
@@ -122,6 +141,7 @@ export function openViewer(canvas, cloud, gridInput) {
     for (const name of ['pointerup','pointercancel','lostpointercapture']) {
       canvas.addEventListener(name,e=>fingers.delete(e.pointerId),options);
     }
+    canvas.addEventListener('auxclick',e=>{ if (e.button===1) e.preventDefault(); },options);
     canvas.addEventListener('wheel',e=>{
       e.preventDefault(); zoom(Math.exp(clamp(e.deltaY*.002,-1,1)));
     },{...options,passive:false});
