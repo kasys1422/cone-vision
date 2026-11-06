@@ -21,11 +21,23 @@ from torchvision.ops.feature_pyramid_network import LastLevelP6P7
 SIZE = 512
 
 
-def read_split(directory, archive, split):
+def read_split(directory, archive, split, *, synthetic=False):
     records = []
-    for line in (directory / f"real_detection_{split}.jsonl").read_text().splitlines():
+    prefix = "synthetic" if synthetic else "real_detection"
+    manifest = directory / f"{prefix}_{split}.jsonl"
+    if synthetic:
+        suffix = f"/images/{split}/000000.jpg"
+        roots = [name[:-len(suffix)] for name in archive.namelist() if name.endswith(suffix)]
+        if len(roots) != 1:
+            raise ValueError(f"Expected one synthetic image root containing {suffix}")
+    for line in manifest.read_text(encoding="utf-8").splitlines():
         record = json.loads(line)
-        data = archive.read("Cone-Detection-main/TraCon_dataset/" + record["image_relative"])
+        if synthetic:
+            filename = Path(record["image"].replace("\\", "/")).name
+            member = f"{roots[0]}/images/{split}/{filename}"
+        else:
+            member = "Cone-Detection-main/TraCon_dataset/" + record["image_relative"]
+        data = archive.read(member)
         if hashlib.sha256(data).hexdigest() != record["sha256"]:
             raise ValueError(f"Image hash mismatch: {record['image_id']}")
         image = np.asarray(ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB"))
@@ -41,6 +53,16 @@ def read_split(directory, archive, split):
         transform = torch.tensor([nw/w,nh/h,nw/w,nh/h]), torch.tensor([x,y,x,y]), (w,h)
         records.append((record["image_id"], torch.from_numpy(canvas).permute(2,0,1), boxes, transform))
     return records
+
+
+def mixed_epoch(real, synthetic, epoch, sampler):
+    # Keep the real-only run's image/update budget. Round across epochs so
+    # that one in three sampled images comes from the synthetic train split.
+    n = len(real)
+    synthetic_count = ((epoch + 1) * n) // 3 - (epoch * n) // 3
+    batch = sampler.sample(real, n - synthetic_count) + sampler.sample(synthetic, synthetic_count)
+    sampler.shuffle(batch)
+    return batch
 
 
 def build_model(backbone="resnet50"):
@@ -153,7 +175,14 @@ def main():
     parser.add_argument("output",type=Path)
     parser.add_argument("--epochs",type=int,default=10)
     parser.add_argument("--backbone", choices=("resnet50", "resnet18"), default="resnet50")
+    parser.add_argument("--synthetic-zip", type=Path)
+    parser.add_argument("--mixed-epochs", type=int, default=0,
+                        help="Use real:synthetic 2:1 for these epochs, then finish on real images")
     args = parser.parse_args()
+    if not 0 <= args.mixed_epochs < args.epochs:
+        parser.error("--mixed-epochs must leave at least one real-only epoch")
+    if bool(args.synthetic_zip) != bool(args.mixed_epochs):
+        parser.error("Supply --synthetic-zip and --mixed-epochs together")
     args.output.mkdir(parents=True,exist_ok=True)
     torch.manual_seed(13)
     random.seed(13)
@@ -165,13 +194,23 @@ def main():
         train = read_split(args.dataset,archive,"train")
         val = read_split(args.dataset,archive,"val")
     print("Training / validation images",len(train),len(val),flush=True)
+    sampler = random.Random(13)
+    if args.mixed_epochs:
+        with zipfile.ZipFile(args.synthetic_zip) as archive:
+            synthetic = read_split(args.dataset, archive, "train", synthetic=True)
+        print("Synthetic training images", len(synthetic), flush=True)
     history = []
+    best_f1 = -1
     for epoch in range(args.epochs):
         model.train()
-        random.shuffle(train)
-        for start in range(0,len(train),4):
+        if epoch < args.mixed_epochs:
+            epoch_images = mixed_epoch(train, synthetic, epoch, sampler)
+        else:
+            random.shuffle(train)
+            epoch_images = train
+        for start in range(0,len(epoch_images),4):
             images,targets = [],[]
-            for _,image,gt,(scale,pad,_) in train[start:start+4]:
+            for _,image,gt,(scale,pad,_) in epoch_images[start:start+4]:
                 image = image.to(device).float()/255
                 boxes = (gt*scale+pad).to(device)
                 if random.random()<.5:
@@ -190,7 +229,8 @@ def main():
             optimizer.step()
         metrics,_ = evaluate(model,val,device)
         print(epoch+1,metrics,flush=True)
-        if not history or metrics["f1"] > max(row["f1"] for row in history):
+        if epoch >= args.mixed_epochs and metrics["f1"] > best_f1:
+            best_f1 = metrics["f1"]
             torch.save(model.state_dict(),args.output/"best.pt")
         history.append(metrics)
         if epoch+1 == args.epochs//2:
