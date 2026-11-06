@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readExifTags, estimateExifFov, readExifFov} from '../web_demo/exif_fov.mjs';
+import {convertFovSpan, readExifTags, estimateExifFov, readExifFov} from '../web_demo/exif_fov.mjs';
 
 // Generate minimal EXIF/TIFF fixtures without depending on external test images.
 function tiff({f35=26, focal=4.7, width=4032, height=3024, orientation=1, zoom=1,
@@ -99,4 +99,18 @@ test('missing or damaged metadata fails safely',()=>{
   assert.equal(readExifTags(binary(jpeg())),null);
   assert.equal(readExifTags(binary(Buffer.from([0xff,0xd8,0xff,0xe1,0,18,1]))),null);
   assert.equal(estimateExifFov(null,{width:640,height:480}).status,'missing');
+});
+
+test('portrait manual and EXIF angles preserve focal length across a quarter turn', () => {
+  const landscape = {width: 4032, height: 3024};
+  const portrait = {width: 3024, height: 4032};
+  const ratio = portrait.width / landscape.width;
+  const tags = {imageWidth: 4032, imageHeight: 3024, focalLength35mm: 26};
+  const horizontal = estimateExifFov({...tags, orientation: 1}, landscape);
+  const vertical = estimateExifFov({...tags, orientation: 6}, portrait);
+  assert.equal(vertical.focalPx, horizontal.focalPx);
+  assert.ok(Math.abs(convertFovSpan(horizontal.fovDeg, ratio) - vertical.fovDeg) < 1e-9);
+  const manual = convertFovSpan(60, ratio);
+  assert.equal(manual.toFixed(2), '46.83');
+  assert.ok(Math.abs(convertFovSpan(manual, 1 / ratio) - 60) < 1e-9);
 });

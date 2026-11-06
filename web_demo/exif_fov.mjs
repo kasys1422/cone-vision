@@ -146,6 +146,11 @@ export function readExifTags(buffer) {
   return null;
 }
 
+// For a fixed lens, tan(FOV / 2) scales with the span along that axis.
+export function convertFovSpan(degrees, ratio) {
+  return 2 * Math.atan(Math.tan(degrees * Math.PI / 360) * ratio) * 180 / Math.PI;
+}
+
 function dimensionsMismatch(meta, width, height) {
   if (!meta.imageWidth || !meta.imageHeight) return false;
   const rotated = [5, 6, 7, 8].includes(meta.orientation);

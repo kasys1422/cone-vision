@@ -1,5 +1,5 @@
 import {loadPackedScriptURL} from './packed_loader.mjs';
-import {readExifFov} from './exif_fov.mjs';
+import {convertFovSpan, readExifFov} from './exif_fov.mjs';
 import {deleteModels, mib, modelStorage, readModel} from './model_store.mjs';
 import {ConeVision, DETECTOR_PROFILES} from './inference.mjs';
 import {loadOpenCV, scaleGeometry} from './pnp.mjs';
@@ -35,6 +35,7 @@ const state = {
   scanning: false,
   imageSequence: 0,
   exifFov: null,
+  manualLongEdgeFov: 60,
   fovSource: 'manual'
 };
 
@@ -152,27 +153,29 @@ function activeCameraModel(width, height) {
   return {K: createApproxK(width, height, hfov), distortion: [], mode: isExif ? 'EXIF概算' : '手動概算'};
 }
 
+function horizontalSpanRatio() {
+  const bitmap = state.sourceBitmap;
+  return bitmap ? bitmap.width / Math.max(bitmap.width, bitmap.height) : 1;
+}
+
 function applyExifFov(result) {
-  const wasExif = state.fovSource === 'exif';
   state.exifFov = result;
-  if (result?.status === 'ok') {
-    state.fovSource = 'exif';
-    els.fovInput.value = result.fovDeg.toFixed(2);
-    els.reviewFovInput.value = els.fovInput.value;
-    els.useExifFovButton.classList.add('hidden');
-  } else {
-    state.fovSource = 'manual';
-    // Never silently reuse the previous photo's EXIF focal length for a different image.
-    if (wasExif) els.fovInput.value = '60';
-    els.reviewFovInput.value = els.fovInput.value;
-    els.useExifFovButton.classList.add('hidden');
-  }
+  const auto = result?.status === 'ok';
+  state.fovSource = auto ? 'exif' : 'manual';
+  const horizontal = auto ? result.fovDeg : convertFovSpan(state.manualLongEdgeFov, horizontalSpanRatio());
+  els.fovInput.value = horizontal.toFixed(2);
+  els.reviewFovInput.value = els.fovInput.value;
+  els.useExifFovButton.classList.add('hidden');
 }
 
 function markManualFov(fromReview = false) {
   if (fromReview) els.fovInput.value = els.reviewFovInput.value;
   else els.reviewFovInput.value = els.fovInput.value;
   state.fovSource = 'manual';
+  const degrees = Number(els.fovInput.value);
+  if (degrees > 4 && degrees < 175) {
+    state.manualLongEdgeFov = convertFovSpan(degrees, 1 / horizontalSpanRatio());
+  }
   els.useExifFovButton.classList.toggle('hidden', state.exifFov?.status !== 'ok');
 }
 
