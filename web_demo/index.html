@@ -251,19 +251,18 @@
           <div class="bottom-sheet">
             <section class="selection-panel">
               <div class="panel-header">
-                <h3>検出されたコーン</h3>
-                <span id="objectCountBadge" class="count-badge">0</span>
+                <h3>検出されたコーン <span id="objectCountBadge" class="count-badge">0</span></h3>
+                <button id="saveResultButton" type="button" class="ghost-button small">結果JSON保存</button>
               </div>
               <div id="coneList" class="cone-list empty">
                 まだ解析していません
               </div>
+              <button id="undoRemoveCone" type="button" class="ghost-button small hidden">削除を取り消す</button>
             </section>
             <section id="detailPanel" class="detail-panel hidden">
               <div class="panel-header">
                 <h3 id="selectedConeTitle">コーン</h3>
-                <button id="saveResultButton" class="ghost-button small">
-                  結果JSON保存
-                </button>
+                <button id="removeCone" type="button" class="secondary-button">このコーンを削除</button>
               </div>
               <div class="metric-grid">
                 <div class="metric-item distance-metric">

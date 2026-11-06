@@ -31,6 +31,7 @@ const state = {
   sourceBitmap: null,
   sourceImageData: null,
   lastResult: null,
+  removedCones: [],
   cloud: null,
   viewer: null,
   selectedIndex: null,
@@ -366,7 +367,7 @@ function selectCone(index) {
   const obj = state.lastResult?.objects?.[index];
   if (!obj) {
     els.detailPanel.classList.add('hidden');
-    els.resultSubtitle.textContent = state.lastResult?.objects?.length ? 'コーンを選択してください' : 'コーンが見つかりませんでした';
+    els.resultSubtitle.textContent = state.lastResult?.objects?.length ? 'コーンを選択してください' : els.coneList.textContent;
     return;
   }
   els.detailPanel.classList.remove('hidden');
@@ -378,6 +379,28 @@ function selectCone(index) {
   els.confidenceValue.textContent = obj.confidence.toFixed(2);
 }
 
+
+function removeSelectedCone() {
+  const objects = state.lastResult?.objects;
+  const index = state.selectedIndex;
+  if (state.scanning || !Number.isInteger(index) || !objects?.[index]) return;
+  const [object] = objects.splice(index, 1);
+  state.removedCones.push({index, object});
+  state.cloud = null;
+  setRegionMode(false);
+  selectCone(null);
+  $('#undoRemoveCone').focus({preventScroll: true});
+}
+
+function undoRemoveCone() {
+  if (state.scanning || !state.removedCones.length) return;
+  const {index, object} = state.removedCones.pop();
+  state.lastResult.objects.splice(index, 0, object);
+  state.cloud = null;
+  setRegionMode(false);
+  selectCone(index);
+  els.coneList.children[index].focus({preventScroll: true});
+}
 
 function selectConeByCanvasEvent(event) {
   if (state.scanning || state.regionSelection || !state.lastResult?.objects?.length) return;
@@ -466,11 +489,12 @@ function bindRegionSelection() {
 
 function renderConeList() {
   const objects = state.lastResult?.objects ?? [];
+  $('#undoRemoveCone').classList.toggle('hidden', !state.removedCones.length);
   $('#openCloud').classList.toggle('hidden', measuredCones(objects).length < 2);
   els.objectCountBadge.textContent = String(objects.length);
   if (!objects.length) {
     els.coneList.className = 'cone-list empty';
-    els.coneList.textContent = 'コーンが見つかりませんでした';
+    els.coneList.textContent = state.removedCones.length ? '残っているコーンはありません' : 'コーンが見つかりませんでした';
     els.detailPanel.classList.add('hidden');
     return;
   }
@@ -519,6 +543,7 @@ async function runScan(region = null) {
       const previousCount = objects.length;
       let matchedIndex = null;
       for (const obj of result.objects) {
+        if (state.removedCones.some(({object}) => sameCone(object.bbox_xyxy, obj.bbox_xyxy))) continue;
         const index = objects.findIndex(old => sameCone(old.bbox_xyxy, obj.bbox_xyxy));
         if (index < 0) objects.push(obj);
         else if (matchedIndex === null) matchedIndex = index;
@@ -527,12 +552,14 @@ async function runScan(region = null) {
       if (added) state.cloud = null;
       state.lastResult.time_ms += result.time_ms;
       setRegionMode(false, added ? `${added}個追加しました。` :
-        result.objects.length ? 'すでに検出済みです。' : 'この範囲にコーンは見つかりませんでした。');
+        matchedIndex !== null ? 'すでに検出済みです。' :
+        result.objects.length ? '削除済みのコーンです。' : 'この範囲にコーンは見つかりませんでした。');
       selectCone(added ? previousCount : matchedIndex ?? state.selectedIndex);
       return;
     }
     state.cloud = null;
     state.lastResult = result;
+    state.removedCones = [];
     result.pose_mode = camera.mode;
     result.camera_fov = {horizontal_fov_deg: Number(els.fovInput.value), source: state.fovSource, exif_status: state.exifFov?.status ?? 'none'};
     setRegionMode(false);
@@ -554,6 +581,7 @@ function setSourceFromBitmap(bitmap, source) {
   state.sourceImageData = null;
   state.cloud = null;
   state.lastResult = null;
+  state.removedCones = [];
   state.selectedIndex = null;
   drawBitmapToCanvas(bitmap, reviewCanvas, reviewCtx);
   els.retakeButton.classList.toggle('hidden', source !== 'camera');
@@ -728,6 +756,8 @@ function bindEvents() {
     }
   });
   resultCanvas.addEventListener('click', selectConeByCanvasEvent);
+  $('#removeCone').addEventListener('click', removeSelectedCone);
+  $('#undoRemoveCone').addEventListener('click', undoRemoveCone);
   els.saveResultButton.addEventListener('click', saveResultJson);
 }
 

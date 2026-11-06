@@ -418,6 +418,9 @@ video {
 .cone-list.empty {
   color: var(--sub);
 }
+#removeCone { min-height: 44px; padding: 8px 12px; border-radius: 10px; color: #973c2a; }
+#undoRemoveCone { margin-top: 10px; min-height: 44px; }
+.bottom-sheet button { touch-action: manipulation; }
 .cone-item {
   display: grid;
   grid-template-columns: auto 1fr 20px;
